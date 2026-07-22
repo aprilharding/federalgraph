@@ -3,9 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import platform
-import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 from federalgraph import __version__
 from federalgraph.config import Settings
@@ -25,7 +24,20 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("doctor", help="Check the local development environment.")
     subparsers.add_parser("sources", help="List configured data sources.")
-    subparsers.add_parser("organizations", help="Build the organization layer.")
+
+    organizations = subparsers.add_parser(
+        "organizations", help="Build the canonical organization registry."
+    )
+    organizations.add_argument(
+        "--fpi-csv", type=Path, help="Optional CSV with Department and Agency columns."
+    )
+    organizations.add_argument(
+        "--source-csv",
+        type=Path,
+        help="Reuse an existing organization_sources.csv instead of downloading sources.",
+    )
+    organizations.add_argument("--skip-usagov", action="store_true")
+    organizations.add_argument("--skip-federal-register", action="store_true")
     return parser
 
 
@@ -52,7 +64,7 @@ def command_sources(paths: ProjectPaths) -> int:
     return 0
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     configure_logging(args.verbose)
@@ -67,6 +79,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "sources":
         return command_sources(paths)
     if args.command == "organizations":
-        return Pipeline(paths).run_organizations()
+        summary = Pipeline(paths).run_organizations(
+            fpi_csv=args.fpi_csv.resolve() if args.fpi_csv else None,
+            source_csv=args.source_csv.resolve() if args.source_csv else None,
+            skip_usagov=args.skip_usagov,
+            skip_federal_register=args.skip_federal_register,
+        )
+        print(json.dumps(summary, indent=2))
+        print(f"\nOutputs: {paths.processed}")
+        return 0
+
     parser.error(f"Unsupported command: {args.command}")
     return 2

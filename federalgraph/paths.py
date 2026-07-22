@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -13,7 +14,7 @@ class ProjectPaths:
     processed: Path
 
     @classmethod
-    def discover(cls, start: Path | None = None) -> "ProjectPaths":
+    def discover(cls, start: Optional[Path] = None) -> "ProjectPaths":
         current = (start or Path.cwd()).resolve()
         for candidate in (current, *current.parents):
             if (candidate / "pyproject.toml").exists():

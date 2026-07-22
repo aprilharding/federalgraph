@@ -3,17 +3,27 @@
     "usagov": {
       "enabled": true,
       "kind": "organization_directory",
-      "authority": "official"
+      "authority": "official",
+      "base_url": "https://www.usa.gov/agency-index",
+      "letters": "abcdefghijklmnopqrstuvwxyz",
+      "timeout_seconds": 45
     },
     "federal_register": {
       "enabled": true,
       "kind": "organization_directory",
-      "authority": "official"
+      "authority": "official",
+      "endpoint": "https://www.federalregister.gov/api/v1/agencies.json",
+      "timeout_seconds": 45
     },
     "fpi": {
       "enabled": true,
       "kind": "program_inventory",
       "authority": "official"
     }
+  },
+  "resolution": {
+    "auto_merge_threshold": 96,
+    "review_threshold": 72,
+    "hierarchy_threshold": 80
   }
 }
