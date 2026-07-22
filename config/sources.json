@@ -1,0 +1,19 @@
+{
+  "sources": {
+    "usagov": {
+      "enabled": true,
+      "kind": "organization_directory",
+      "authority": "official"
+    },
+    "federal_register": {
+      "enabled": true,
+      "kind": "organization_directory",
+      "authority": "official"
+    },
+    "fpi": {
+      "enabled": true,
+      "kind": "program_inventory",
+      "authority": "official"
+    }
+  }
+}
