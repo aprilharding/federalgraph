@@ -23,7 +23,7 @@
   },
   "resolution": {
     "auto_merge_threshold": 96,
-    "review_threshold": 72,
+    "review_threshold": 88,
     "hierarchy_threshold": 80
   }
 }

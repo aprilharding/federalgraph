@@ -20,6 +20,9 @@ def _agency_blocks(soup: BeautifulSoup):
         text = heading.get_text(" ", strip=True)
         if not text or len(text) > 180:
             continue
+        # Alphabet headings on USA.gov are navigation, not organizations.
+        if re.fullmatch(r"[A-Z]", text):
+            continue
         link = heading.find("a", href=True)
         container = heading.parent
         desc = ""
@@ -56,6 +59,9 @@ def extract(base_url: str, letters: str, raw_dir: Path, timeout: int = 45) -> li
         try:
             r = session.get(url, timeout=timeout)
             r.raise_for_status()
+            # USA.gov is UTF-8. Requests can otherwise mis-detect punctuation as
+            # Windows-1252, producing names such as ``CongressâU.S. Senate``.
+            r.encoding = "utf-8"
             (raw_dir / ("usagov_" + (url.rstrip("/").split("/")[-1] or "a") + ".html")).write_text(r.text, encoding="utf-8")
             soup = BeautifulSoup(r.text, "html.parser")
             count_before = len(records)
