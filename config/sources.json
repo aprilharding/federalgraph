@@ -21,23 +21,26 @@
       "authority": "official"
     },
     "govinfo_govman": {
-      "enabled": false,
+      "enabled": true,
       "kind": "organization_directory",
       "authority": "canonical_name",
       "package_id": "GOVMAN-2025-12-31",
       "xml_url": "https://www.govinfo.gov/content/pkg/GOVMAN-2025-12-31/xml/GOVMAN-2025-12-31.xml",
       "publication_date": "2025-12-31",
       "timeout_seconds": 120,
-      "notes": "Authoritative canonical organization name when an entity appears in the U.S. Government Manual."
+      "notes": "Authoritative canonical organization name when an entity appears in the U.S. Government Manual.",
+      "context_url": "https://www.govinfo.gov/app/details/GOVMAN-2025-12-31/context",
+      "workers": 12
     },
     "opm_fwd": {
-      "enabled": false,
+      "enabled": true,
       "kind": "workforce_organization_hierarchy",
       "authority": "official",
       "files_api": "https://data.opm.gov/api/v1/files/employment",
       "download_base_url": "https://data.opm.gov/api/v1/files/employment",
-      "timeout_seconds": 120,
-      "notes": "Official OPM/EHRI workforce department, agency, and subagency names/codes. Fallback naming authority only when GovInfo is absent."
+      "timeout_seconds": 180,
+      "notes": "Official OPM/EHRI workforce department, agency, and subagency names/codes. Fallback naming authority only when GovInfo is absent.",
+      "selection": "current_latest"
     }
   },
   "resolution": {

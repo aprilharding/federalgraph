@@ -11,7 +11,7 @@ import pandas as pd
 from federalgraph.config import Settings
 from federalgraph.export.csv_export import export_all
 from federalgraph.export.wordpress import export as export_wordpress
-from federalgraph.extract import federal_register, fpi, usagov
+from federalgraph.extract import federal_register, fpi, govinfo_govman, opm_fwd, usagov
 from federalgraph.normalize.organizations import normalize_records
 from federalgraph.paths import ProjectPaths
 from federalgraph.resolve.organizations import resolve
@@ -30,6 +30,8 @@ class Pipeline:
         source_csv: Optional[Path] = None,
         skip_usagov: bool = False,
         skip_federal_register: bool = False,
+        skip_govinfo: bool = False,
+        skip_opm: bool = False,
     ) -> dict[str, object]:
         self.paths.ensure_data_dirs()
         settings = Settings.load(self.paths.config / "sources.json").values
@@ -67,6 +69,33 @@ class Pipeline:
                 )
                 records.extend(register_records)
                 extraction_summary["federal_register_source_records"] = len(register_records)
+
+            govman = source_settings.get("govinfo_govman", {})
+            if govman.get("enabled", False) and not skip_govinfo:
+                LOGGER.info("Extracting organizations from the U.S. Government Manual / GovInfo")
+                govinfo_records = govinfo_govman.extract(
+                    govman["package_id"],
+                    govman["xml_url"],
+                    govman["publication_date"],
+                    self.paths.raw,
+                    timeout=int(govman.get("timeout_seconds", 120)),
+                    workers=int(govman.get("workers", 12)),
+                )
+                records.extend(govinfo_records)
+                extraction_summary["govinfo_source_records"] = len(govinfo_records)
+                extraction_summary["govinfo_package_id"] = govman["package_id"]
+
+            opm = source_settings.get("opm_fwd", {})
+            if opm.get("enabled", False) and not skip_opm:
+                LOGGER.info("Extracting organization hierarchy from OPM Federal Workforce Data")
+                opm_records = opm_fwd.extract(
+                    opm["files_api"],
+                    opm["download_base_url"],
+                    self.paths.raw,
+                    timeout=int(opm.get("timeout_seconds", 180)),
+                )
+                records.extend(opm_records)
+                extraction_summary["opm_source_records"] = len(opm_records)
 
             if fpi_csv is not None:
                 LOGGER.info("Extracting organization evidence from %s", fpi_csv)

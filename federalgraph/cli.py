@@ -38,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     organizations.add_argument("--skip-usagov", action="store_true")
     organizations.add_argument("--skip-federal-register", action="store_true")
+    organizations.add_argument("--skip-govinfo", action="store_true")
+    organizations.add_argument("--skip-opm", action="store_true")
     return parser
 
 
@@ -84,6 +86,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             source_csv=args.source_csv.resolve() if args.source_csv else None,
             skip_usagov=args.skip_usagov,
             skip_federal_register=args.skip_federal_register,
+            skip_govinfo=args.skip_govinfo,
+            skip_opm=args.skip_opm,
         )
         print(json.dumps(summary, indent=2))
         print(f"\nOutputs: {paths.processed}")
