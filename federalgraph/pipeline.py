@@ -80,6 +80,10 @@ class Pipeline:
                     self.paths.raw,
                     timeout=int(govman.get("timeout_seconds", 120)),
                     workers=int(govman.get("workers", 12)),
+                    api_base_url=govman.get("api_base_url", "https://api.govinfo.gov"),
+                    api_key_env=govman.get("api_key_env", "GOVINFO_API_KEY"),
+                    api_key_fallback=govman.get("api_key_fallback", "DEMO_KEY"),
+                    page_size=int(govman.get("api_page_size", 100)),
                 )
                 records.extend(govinfo_records)
                 extraction_summary["govinfo_source_records"] = len(govinfo_records)

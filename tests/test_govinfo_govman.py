@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from federalgraph.extract.govinfo_govman import discover_granule_ids, parse_detail_html
+from federalgraph.extract.govinfo_govman import (
+    discover_granule_ids,
+    discover_granule_ids_from_xml,
+    granule_ids_from_api_payload,
+    parse_detail_html,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "govinfo"
 PACKAGE = "GOVMAN-2025-12-31"
@@ -12,6 +17,34 @@ def test_discover_granule_ids_from_context_html():
     assert ids == [
         "GOVMAN-2025-12-31-114",
         "GOVMAN-2025-12-31-206",
+        "GOVMAN-2025-12-31-266",
+    ]
+
+
+def test_granule_ids_from_govinfo_api_payload():
+    payload = {
+        "count": 3,
+        "granules": [
+            {"granuleId": "GOVMAN-2025-12-31-114"},
+            {"granuleId": "GOVMAN-2025-12-31-206"},
+            {"granuleId": "GOVMAN-2025-12-31-266"},
+        ],
+    }
+    assert granule_ids_from_api_payload(payload) == [
+        "GOVMAN-2025-12-31-114",
+        "GOVMAN-2025-12-31-206",
+        "GOVMAN-2025-12-31-266",
+    ]
+
+
+def test_granule_ids_from_package_xml_is_a_safe_fallback():
+    xml = b'''<root>
+      <ref>GOVMAN-2025-12-31-114</ref>
+      <ref>GOVMAN-2025-12-31-266</ref>
+      <ref>GOVMAN-2025-12-31-114</ref>
+    </root>'''
+    assert discover_granule_ids_from_xml(xml, PACKAGE) == [
+        "GOVMAN-2025-12-31-114",
         "GOVMAN-2025-12-31-266",
     ]
 

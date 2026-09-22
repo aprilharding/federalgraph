@@ -30,7 +30,11 @@
       "timeout_seconds": 120,
       "notes": "Authoritative canonical organization name when an entity appears in the U.S. Government Manual.",
       "context_url": "https://www.govinfo.gov/app/details/GOVMAN-2025-12-31/context",
-      "workers": 12
+      "workers": 12,
+      "api_base_url": "https://api.govinfo.gov",
+      "api_key_env": "GOVINFO_API_KEY",
+      "api_key_fallback": "DEMO_KEY",
+      "api_page_size": 100
     },
     "opm_fwd": {
       "enabled": true,

@@ -1,27 +1,27 @@
-# FederalGraph v0.6.0
+# FederalGraph v0.6.1 hotfix
 
-This release turns on the two additional organization sources discussed in RFC-0004 and RFC-0005.
+Fixes the first live GovInfo run.
 
-## Added
+## What failed in v0.6.0
 
-- Current-edition U.S. Government Manual / GovInfo ingest.
-- GovInfo package XML caching and SHA-256 provenance.
-- GovInfo granule audit output and grouping-heading filtering.
-- Current OPM Federal Workforce Data Employment ingest via the public Parquet API.
-- OPM Department / Agency / Subagency source records and code fields.
-- `--skip-govinfo` and `--skip-opm` CLI escape hatches.
-- `pyarrow` dependency for OPM Parquet files.
-- Parser/unit tests for both new sources.
+The extractor downloaded the Government Manual package XML successfully, then tried to discover granules by scraping the package-level `/context` page. GovInfo renders that page's browse tree client-side, so a plain HTTP request can contain the section buttons without the individual granule links. That produced `GovInfo extractor found no granules` and stopped the pipeline before `data/processed` was regenerated.
 
-## Naming policy
+## What changed
 
-GovInfo remains authoritative for `canonical_name` after identity resolution. OPM is the first fallback naming authority when a resolved identity is absent from GovInfo.
+- Granule discovery now uses the official GovInfo packages API first.
+- `GOVINFO_API_KEY` is supported when set.
+- `DEMO_KEY` is used as the zero-setup fallback.
+- If the API is unavailable, FederalGraph attempts to recover granule IDs from the already-downloaded package XML, then falls back to the old context-page method.
+- Discovery diagnostics are written to `data/raw/govinfo/<package>/granule_discovery.json`.
+- Version bumped to 0.6.1.
 
-## Run
+## Testing
+
+Install development extras before running tests:
 
 ```bash
-python -m pip install -e .
-federalgraph organizations
+python -m pip install -e ".[dev]"
+pytest
 ```
 
-The first run downloads roughly 13 MB of GovInfo XML plus the current OPM employment Parquet file (tens of MB), so it will take longer than v0.5.
+The normal pipeline does not require pytest.
