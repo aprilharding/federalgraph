@@ -78,11 +78,19 @@ class Pipeline:
             raise RuntimeError("No organization source records were produced.")
 
         normalized = normalize_records(records)
+
+        override_path = self.paths.config / "organization_identity_overrides.csv"
+        identity_overrides: list[dict] = []
+        if override_path.exists():
+            identity_overrides = pd.read_csv(override_path).fillna("").to_dict("records")
+            extraction_summary["identity_overrides_loaded"] = len(identity_overrides)
+
         outputs = resolve(
             normalized,
             auto_merge_threshold=float(resolution.get("auto_merge_threshold", 96)),
             review_threshold=float(resolution.get("review_threshold", 72)),
             hierarchy_threshold=float(resolution.get("hierarchy_threshold", 80)),
+            identity_overrides=identity_overrides,
         )
         summary = export_all(self.paths.processed, *outputs, extraction_summary)
         export_wordpress(

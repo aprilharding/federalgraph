@@ -19,11 +19,39 @@
       "enabled": true,
       "kind": "program_inventory",
       "authority": "official"
+    },
+    "govinfo_govman": {
+      "enabled": false,
+      "kind": "organization_directory",
+      "authority": "canonical_name",
+      "package_id": "GOVMAN-2025-12-31",
+      "xml_url": "https://www.govinfo.gov/content/pkg/GOVMAN-2025-12-31/xml/GOVMAN-2025-12-31.xml",
+      "publication_date": "2025-12-31",
+      "timeout_seconds": 120,
+      "notes": "Authoritative canonical organization name when an entity appears in the U.S. Government Manual."
+    },
+    "opm_fwd": {
+      "enabled": false,
+      "kind": "workforce_organization_hierarchy",
+      "authority": "official",
+      "files_api": "https://data.opm.gov/api/v1/files/employment",
+      "download_base_url": "https://data.opm.gov/api/v1/files/employment",
+      "timeout_seconds": 120,
+      "notes": "Official OPM/EHRI workforce department, agency, and subagency names/codes. Fallback naming authority only when GovInfo is absent."
     }
   },
   "resolution": {
     "auto_merge_threshold": 96,
     "review_threshold": 88,
     "hierarchy_threshold": 80
+  },
+  "name_authority": {
+    "authoritative_source": "govinfo_govman",
+    "fallback_order": [
+      "opm_fwd",
+      "federal_register",
+      "usagov"
+    ],
+    "emit_review_when_fallback_names_disagree": true
   }
 }

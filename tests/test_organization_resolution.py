@@ -109,6 +109,148 @@ def test_parent_relationship_is_not_identity_merge() -> None:
             ),
         ]
     )
-    organizations, _, _, _, relationships, _, _ = resolve(rows)
+    organizations, _, _, _, relationships, _, _, _ = resolve(rows)
     assert len(organizations) == 2
     assert len(relationships) == 1
+
+
+def test_human_merge_override_persists_and_sets_preferred_name() -> None:
+    rows = normalize_records(
+        [
+            record("Federal Register Agencies API", "Postal Rate Commission"),
+            record("USA.gov Agency Index", "Postal Regulatory Commission", "https://www.prc.gov"),
+        ]
+    )
+    overrides = [
+        {
+            "left_name": "Postal Rate Commission",
+            "right_name": "Postal Regulatory Commission",
+            "decision": "historical_alias",
+            "preferred_name": "Postal Regulatory Commission",
+        }
+    ]
+    organizations, aliases, sources, candidates, _, review, _, _ = resolve(
+        rows, identity_overrides=overrides
+    )
+    assert len(organizations) == 1
+    assert organizations[0]["canonical_name"] == "Postal Regulatory Commission"
+    assert organizations[0]["resolution_status"] == "Reviewed merge"
+    assert len(review) == 0
+    assert any(row["decision"] == "manual_historical_alias" for row in candidates)
+    assert {row["canonical_external_id"] for row in sources} == {
+        organizations[0]["external_id"]
+    }
+    assert {row["alias"] for row in aliases} >= {
+        "Postal Rate Commission",
+        "Postal Regulatory Commission",
+    }
+
+
+def test_keep_separate_override_suppresses_repeat_review() -> None:
+    rows = normalize_records(
+        [
+            record("USA.gov Agency Index", "Southeastern Power Administration"),
+            record("Federal Register Agencies API", "Southwestern Power Administration"),
+        ]
+    )
+    overrides = [
+        {
+            "left_name": "Southeastern Power Administration",
+            "right_name": "Southwestern Power Administration",
+            "decision": "keep_separate",
+            "preferred_name": "",
+        }
+    ]
+    organizations, _, _, candidates, _, review, _, _ = resolve(
+        rows, identity_overrides=overrides
+    )
+    assert len(organizations) == 2
+    assert len(review) == 0
+    assert any(row["decision"] == "manual_keep_separate" for row in candidates)
+    assert {row["resolution_status"] for row in organizations} == {"Reviewed separate"}
+
+
+def test_govinfo_name_is_authoritative_over_other_sources() -> None:
+    rows = normalize_records(
+        [
+            record("USA.gov Agency Index", "Treasury Department"),
+            record("Federal Register Agencies API", "Department of the Treasury"),
+            record("U.S. Government Manual (GovInfo)", "Department of the Treasury"),
+        ]
+    )
+    organizations, _, _, _, _, _, name_review, _ = resolve(rows)
+    assert len(organizations) == 1
+    org = organizations[0]
+    assert org["canonical_name"] == "Department of the Treasury"
+    assert org["canonical_name_authority_tier"] == "govinfo_govman"
+    assert org["canonical_name_status"] == "GovInfo authoritative"
+    assert org["canonical_name_source"].startswith("U.S. Government Manual")
+    assert name_review == []
+
+
+def test_human_preferred_name_cannot_override_govinfo() -> None:
+    rows = normalize_records(
+        [
+            record("Federal Register Agencies API", "Postal Rate Commission"),
+            record("USA.gov Agency Index", "Postal Regulatory Commission"),
+            record("U.S. Government Manual (GovInfo)", "Postal Regulatory Commission"),
+        ]
+    )
+    overrides = [
+        {
+            "left_name": "Postal Rate Commission",
+            "right_name": "Postal Regulatory Commission",
+            "decision": "historical_alias",
+            "preferred_name": "Postal Rate Commission",
+        }
+    ]
+    organizations, *_ = resolve(rows, identity_overrides=overrides)
+    assert len(organizations) == 1
+    assert organizations[0]["canonical_name"] == "Postal Regulatory Commission"
+    assert organizations[0]["canonical_name_authority_tier"] == "govinfo_govman"
+
+
+def test_non_govinfo_name_disagreement_enters_name_review_queue() -> None:
+    rows = normalize_records(
+        [
+            record("USA.gov Agency Index", "Example Service"),
+            record("OPM Federal Workforce Data", "Example Administration"),
+        ]
+    )
+    overrides = [
+        {
+            "left_name": "Example Service",
+            "right_name": "Example Administration",
+            "decision": "merge",
+            "preferred_name": "",
+        }
+    ]
+    organizations, _, _, _, _, _, name_review, _ = resolve(rows, identity_overrides=overrides)
+    assert len(organizations) == 1
+    org = organizations[0]
+    assert org["canonical_name"] == "Example Administration"
+    assert org["canonical_name_authority_tier"] == "opm_fwd"
+    assert org["canonical_name_status"] == "Fallback provisional - naming review"
+    assert len(name_review) == 1
+
+
+def test_reviewed_preferred_name_wins_when_govinfo_is_absent() -> None:
+    rows = normalize_records(
+        [
+            record("Federal Register Agencies API", "Old Example Commission"),
+            record("USA.gov Agency Index", "Example Commission"),
+        ]
+    )
+    overrides = [
+        {
+            "left_name": "Old Example Commission",
+            "right_name": "Example Commission",
+            "decision": "historical_alias",
+            "preferred_name": "Example Commission",
+        }
+    ]
+    organizations, _, _, _, _, _, name_review, _ = resolve(rows, identity_overrides=overrides)
+    assert len(organizations) == 1
+    assert organizations[0]["canonical_name"] == "Example Commission"
+    assert organizations[0]["canonical_name_authority_tier"] == "human_review"
+    assert name_review == []

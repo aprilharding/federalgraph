@@ -7,6 +7,8 @@ from itertools import combinations
 
 from rapidfuzz import fuzz
 
+from federalgraph.resolve.name_authority import choose_canonical_name
+
 from federalgraph.common import (
     MEANINGFUL_WORDS,
     matching_tokens,
@@ -160,8 +162,15 @@ def _deterministic_alias_pairs(records: list[dict], uf: UnionFind) -> list[Candi
     return candidates
 
 
-def _review_pairs(records: list[dict], uf: UnionFind, review_threshold: float) -> list[Candidate]:
-    """Generate fuzzy candidates only after deterministic aliases are resolved."""
+def _review_pairs(
+    records: list[dict],
+    uf: UnionFind,
+    review_threshold: float,
+    blocked_root_pairs: set[tuple[int, int]] | None = None,
+) -> list[Candidate]:
+    """Generate fuzzy candidates only after deterministic/manual identity decisions are resolved."""
+
+    blocked_root_pairs = blocked_root_pairs or set()
 
     blocks: dict[str, set[int]] = defaultdict(set)
     for i, rec in enumerate(records):
@@ -177,8 +186,13 @@ def _review_pairs(records: list[dict], uf: UnionFind, review_threshold: float) -
         if len(ids) > 80:
             continue
         for left, right in combinations(sorted(ids), 2):
-            if uf.find(left) != uf.find(right):
-                pairs.add((left, right))
+            left_root, right_root = uf.find(left), uf.find(right)
+            if left_root == right_root:
+                continue
+            root_pair = tuple(sorted((left_root, right_root)))
+            if root_pair in blocked_root_pairs:
+                continue
+            pairs.add((left, right))
 
     candidates: list[Candidate] = []
     for left, right in sorted(pairs):
@@ -189,39 +203,109 @@ def _review_pairs(records: list[dict], uf: UnionFind, review_threshold: float) -
     return candidates
 
 
-def _choose_canonical_name(member_recs: list[dict]) -> str:
-    """Choose a readable display name without discarding any aliases.
 
-    Prefer names independently attested across sources, but penalize known
-    directory-index forms such as ``Agriculture Department``. USA.gov wins
-    display-style ties because it is the current public directory.
+def _override_name_key(value: str) -> str:
+    return normalize_name((value or "").strip())
+
+
+def _apply_identity_overrides(
+    records: list[dict],
+    uf: UnionFind,
+    overrides: list[dict] | None,
+) -> tuple[list[Candidate], set[tuple[int, int]], dict[int, str], set[int], set[int]]:
+    """Apply persistent human identity decisions.
+
+    Overrides are intentionally human-readable and keyed by source-visible names.
+    They are applied after deterministic lexical aliases but before fuzzy review.
+    ``merge`` and ``historical_alias`` union the two identities. ``keep_separate``
+    suppresses that pair from future review runs. Preferred names are used only
+    for reviewed merges and never inferred from fuzzy scores.
     """
 
-    support: dict[str, set[str]] = defaultdict(set)
-    for rec in member_recs:
-        base = strip_parenthetical_acronym(rec.get("source_name", ""))
-        if base:
-            support[normalize_name(base)].add(rec.get("source", ""))
+    if not overrides:
+        return [], set(), {}, set(), set()
 
-    def rank(rec: dict) -> tuple:
-        source = rec.get("source", "")
-        base = strip_parenthetical_acronym(rec.get("source_name", ""))
-        normalized = normalize_name(base)
-        score = len(support.get(normalized, set())) * 100
-        if source.startswith("USA.gov"):
-            score += 10
-        elif source.startswith("Federal Register"):
-            score += 5
-        if base.startswith("U.S. "):
-            score += 2
-        if "," in base:
-            score -= 30
-        if normalized.endswith(" department") and not normalized.startswith("department "):
-            score -= 150
-        return (-score, len(base), base.lower())
+    name_to_indices: dict[str, set[int]] = defaultdict(set)
+    for i, rec in enumerate(records):
+        source_name = rec.get("source_name", "")
+        base_name = rec.get("base_name", "")
+        for value in (source_name, base_name):
+            key = _override_name_key(value)
+            if key:
+                name_to_indices[key].add(i)
 
-    ranked = sorted(member_recs, key=rank)
-    return strip_parenthetical_acronym(ranked[0].get("source_name", ""))
+    applied: list[Candidate] = []
+    keep_specs: list[tuple[set[int], set[int]]] = []
+    preferred_specs: list[tuple[set[int], set[int], str]] = []
+    merge_members: set[int] = set()
+
+    for override in overrides:
+        left_key = _override_name_key(override.get("left_name", ""))
+        right_key = _override_name_key(override.get("right_name", ""))
+        decision = (override.get("decision") or "").strip().lower()
+        preferred_name = (override.get("preferred_name") or "").strip()
+        left_ids = set(name_to_indices.get(left_key, set()))
+        right_ids = set(name_to_indices.get(right_key, set()))
+
+        if not left_ids or not right_ids:
+            # Source directories change over time. A stale override should not
+            # break the build; it simply remains unapplied until the alias is
+            # present again.
+            continue
+
+        left_rep, right_rep = min(left_ids), min(right_ids)
+        if decision in {"merge", "historical_alias"}:
+            for left in left_ids:
+                for right in right_ids:
+                    uf.union(left, right)
+                    merge_members.update({left, right})
+            preferred_specs.append((left_ids, right_ids, preferred_name))
+            applied.append(
+                Candidate(
+                    left_rep,
+                    right_rep,
+                    100.0,
+                    [f"human_override:{decision}"],
+                    f"manual_{decision}",
+                )
+            )
+        elif decision == "keep_separate":
+            keep_specs.append((left_ids, right_ids))
+            applied.append(
+                Candidate(
+                    left_rep,
+                    right_rep,
+                    100.0,
+                    ["human_override:keep_separate"],
+                    "manual_keep_separate",
+                )
+            )
+
+    # Resolve keep-separate pairs against the union-find roots *after* all human
+    # merges have been applied. This suppresses every record-level variant of the
+    # reviewed pair, not merely the two display names in the CSV.
+    blocked_root_pairs: set[tuple[int, int]] = set()
+    keep_roots: set[int] = set()
+    for left_ids, right_ids in keep_specs:
+        left_roots = {uf.find(i) for i in left_ids}
+        right_roots = {uf.find(i) for i in right_ids}
+        for left_root in left_roots:
+            for right_root in right_roots:
+                if left_root == right_root:
+                    continue
+                blocked_root_pairs.add(tuple(sorted((left_root, right_root))))
+                keep_roots.update({left_root, right_root})
+
+    preferred_names: dict[int, str] = {}
+    for left_ids, right_ids, preferred_name in preferred_specs:
+        if not preferred_name:
+            continue
+        roots = {uf.find(i) for i in left_ids | right_ids}
+        for root in roots:
+            preferred_names[root] = preferred_name
+
+    merge_roots = {uf.find(i) for i in merge_members}
+    return applied, blocked_root_pairs, preferred_names, merge_roots, keep_roots
 
 
 def _alias_id(organization_id: str, alias: str) -> str:
@@ -271,6 +355,7 @@ def resolve(
     auto_merge_threshold: float = 96,
     review_threshold: float = 88,
     hierarchy_threshold: float = 80,
+    identity_overrides: list[dict] | None = None,
 ):
     # auto_merge_threshold remains in the public signature for configuration
     # compatibility. Fuzzy scores no longer drive automatic identity merges.
@@ -280,8 +365,11 @@ def resolve(
     uf = UnionFind(n)
 
     deterministic = _deterministic_alias_pairs(records, uf)
-    fuzzy = _review_pairs(records, uf, review_threshold)
-    candidates = deterministic + fuzzy
+    manual, blocked_root_pairs, preferred_names, merge_roots, keep_roots = _apply_identity_overrides(
+        records, uf, identity_overrides
+    )
+    fuzzy = _review_pairs(records, uf, review_threshold, blocked_root_pairs)
+    candidates = deterministic + manual + fuzzy
 
     groups: dict[int, list[int]] = defaultdict(list)
     for i in range(n):
@@ -290,11 +378,13 @@ def resolve(
     organizations: list[dict] = []
     alias_rows: list[dict] = []
     source_rows: list[dict] = []
+    name_review: list[dict] = []
     idx_to_org: dict[int, str] = {}
 
-    for members in groups.values():
+    for root, members in groups.items():
         member_recs = [records[i] for i in members]
-        name = _choose_canonical_name(member_recs)
+        name_choice = choose_canonical_name(member_recs, preferred_names.get(root, ""))
+        name = name_choice.name
         oid = stable_id(name)
         aliases = sorted({r.get("source_name", "") for r in member_recs if r.get("source_name")})
         domains = sorted({r.get("domain", "") for r in member_recs if r.get("domain")})
@@ -306,6 +396,11 @@ def resolve(
         org = {
             "external_id": oid,
             "canonical_name": name,
+            "canonical_name_source": name_choice.source,
+            "canonical_name_source_record_id": name_choice.source_record_id,
+            "canonical_name_as_of": name_choice.source_as_of,
+            "canonical_name_authority_tier": name_choice.authority_tier,
+            "canonical_name_status": name_choice.status,
             "normalized_name": normalize_name(name),
             "aliases": "|".join(aliases),
             "domains": "|".join(domains),
@@ -313,19 +408,44 @@ def resolve(
             "parent_name_candidates": "|".join(parents),
             "source_record_count": len(member_recs),
             "resolution_status": (
-                "Deterministically resolved" if len(member_recs) > 1 else "Single-source provisional"
+                "Reviewed merge"
+                if root in merge_roots
+                else (
+                    "Reviewed separate"
+                    if root in keep_roots
+                    else (
+                        "Deterministically resolved"
+                        if len(member_recs) > 1
+                        else "Single-source provisional"
+                    )
+                )
             ),
             "active_status": "Unreviewed",
         }
         organizations.append(org)
         alias_rows.extend(_build_alias_rows(oid, member_recs))
+        if name_choice.needs_review:
+            name_review.append(
+                {
+                    "external_id": oid,
+                    "chosen_name": name_choice.name,
+                    "chosen_source": name_choice.source,
+                    "chosen_source_record_id": name_choice.source_record_id,
+                    "canonical_name_status": name_choice.status,
+                    "candidate_names": "|".join(name_choice.variants),
+                    "review_action": "confirm canonical name / select fallback name",
+                    "review_notes": "",
+                }
+            )
 
         for i, rec in zip(members, member_recs):
             idx_to_org[i] = oid
             source_row = dict(rec)
             source_row["canonical_external_id"] = oid
             source_row["match_method"] = (
-                "deterministic_alias" if len(member_recs) > 1 else "new_entity"
+                "reviewed_identity_merge"
+                if root in merge_roots
+                else ("deterministic_alias" if len(member_recs) > 1 else "new_entity")
             )
             source_rows.append(source_row)
 
@@ -433,5 +553,15 @@ def resolve(
         review,
         key=lambda row: (-float(row["score"]), str(row["left_name"]), str(row["right_name"])),
     )
+    name_review = sorted(name_review, key=lambda row: str(row["chosen_name"]).lower())
 
-    return organizations, alias_rows, source_rows, candidate_rows, relationships, review, status
+    return (
+        organizations,
+        alias_rows,
+        source_rows,
+        candidate_rows,
+        relationships,
+        review,
+        name_review,
+        status,
+    )

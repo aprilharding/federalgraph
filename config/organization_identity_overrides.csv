@@ -1,0 +1,64 @@
+left_name,right_name,decision,preferred_name,reviewed_by,notes
+"National Intelligence, Office of the National Director",Office of the Director of National Intelligence,merge,Office of the Director of National Intelligence,FederalGraph v1 review,Directory/source-name variant; source descriptions identify ODNI.
+Pacific Command,U.S. Indo-Pacific Command,historical_alias,U.S. Indo-Pacific Command,FederalGraph v1 review,"USA.gov rows share website, acronym, and description identifying U.S. Indo-Pacific Command."
+Mediation and Conciliation Service,Federal Mediation and Conciliation Service,merge,Federal Mediation and Conciliation Service,FederalGraph v1 review,USA.gov rows share FMCS website/acronym/description.
+Congress—U.S. House of Representatives,U.S. House of Representatives,merge,U.S. House of Representatives,FederalGraph v1 review,USA.gov rows share house.gov and identical description.
+Policy Development and Research,Office of Policy Development and Research,merge,Office of Policy Development and Research,FederalGraph v1 review,USA.gov rows share HUD website and identical office description.
+Fair Housing and Equal Opportunity,Office of Fair Housing and Equal Opportunity,merge,Office of Fair Housing and Equal Opportunity,FederalGraph v1 review,USA.gov rows share HUD website and identical office description.
+Prevention Information Network,National Prevention Information Network,merge,National Prevention Information Network,FederalGraph v1 review,USA.gov rows share NPIN website and identical description.
+Community Planning and Development,Office of Community Planning and Development,merge,Office of Community Planning and Development,FederalGraph v1 review,USA.gov rows share HUD website and identical office description.
+Federal Register,Office of the Federal Register,merge,Office of the Federal Register,FederalGraph v1 review,USA.gov description explicitly identifies Office of the Federal Register; Federal Register source is Federal Register Office.
+Corps of Engineers,U.S. Army Corps of Engineers,merge,U.S. Army Corps of Engineers,FederalGraph v1 review,USA.gov rows share USACE website and identical description.
+Federal Law Enforcement Training Center,Federal Law Enforcement Training Centers,historical_alias,Federal Law Enforcement Training Centers,FederalGraph v1 review,Same FLETC organization; singular/plural source-name variation.
+Indian Affairs,Bureau of Indian Affairs,merge,Bureau of Indian Affairs,FederalGraph v1 review,USA.gov Indian Affairs row explicitly describes Bureau of Indian Affairs and shares bia.gov.
+Medicare Payment Advisory Commission (MedPAC),Medicare Payment Advisory Commission,merge,Medicare Payment Advisory Commission,FederalGraph v1 review,Same MedPAC entity across USA.gov and Federal Register.
+Bureau of Prisons,Federal Bureau of Prisons,merge,Federal Bureau of Prisons,FederalGraph v1 review,USA.gov rows share bop.gov and explicitly identify Federal Bureau of Prisons.
+Circuit Courts of Appeal,U.S. Courts of Appeal,merge,U.S. Courts of Appeal,FederalGraph v1 review,USA.gov rows share uscourts.gov and identical description.
+Judicial Circuit Courts of Appeal,U.S. Courts of Appeal,merge,U.S. Courts of Appeal,FederalGraph v1 review,USA.gov rows share uscourts.gov and identical description.
+Postal Rate Commission,Postal Regulatory Commission,historical_alias,Postal Regulatory Commission,FederalGraph v1 review,Federal Register description says Postal Regulatory Commission is successor to Postal Rate Commission.
+Inspectors General,Council of the Inspectors General on Integrity and Efficiency,merge,Council of the Inspectors General on Integrity and Efficiency,FederalGraph v1 review,USA.gov rows share CIGIE website/acronym/description.
+Child Support Enforcement Office,Office of Child Support Services,historical_alias,Office of Child Support Services,FederalGraph v1 review,USA.gov current OCSS row and old office row share site; Federal Register describes earlier office name.
+Air Force Reserve,U.S. Air Force Reserve Command,merge,U.S. Air Force Reserve Command,FederalGraph v1 review,USA.gov rows share AFRC website and identical description naming Air Force Reserve Command.
+Helsinki Commission,Commission on Security and Cooperation in Europe (Helsinki Commission),merge,Commission on Security and Cooperation in Europe (Helsinki Commission),FederalGraph v1 review,USA.gov rows share csce.gov and identical description.
+Defense Finance and Accounting Service Debt and Claims Management Center,Debt and Claims Management Center,merge,Debt and Claims Management Center,FederalGraph v1 review,USA.gov rows share DFAS URL and identical description of same center.
+Fossil Energy,Office of Fossil Energy and Carbon Management,historical_alias,Office of Fossil Energy and Carbon Management,FederalGraph v1 review,USA.gov Fossil Energy row explicitly describes current Office of Fossil Energy and Carbon Management.
+Office of Immigrant and Employee Rights,Immigrant and Employee Rights Section,historical_alias,Immigrant and Employee Rights Section,FederalGraph v1 review,USA.gov rows share DOJ URL and identical description naming current section.
+Interpol,U.S. National Central Bureau - Interpol,merge,U.S. National Central Bureau - Interpol,FederalGraph v1 review,USA.gov Interpol row explicitly identifies Interpol Washington/U.S. National Central Bureau and shares URL.
+Kennedy Center,John F. Kennedy Center for the Performing Arts,merge,John F. Kennedy Center for the Performing Arts,FederalGraph v1 review,USA.gov rows share Kennedy Center website and identical description.
+Agriculture Library,National Agricultural Library,merge,National Agricultural Library,FederalGraph v1 review,USA.gov row explicitly identifies National Agricultural Library; shared site/acronym.
+NOAA Fisheries,National Marine Fisheries Service,merge,National Marine Fisheries Service,FederalGraph v1 review,USA.gov explicitly says NOAA Fisheries is also known as National Marine Fisheries Service.
+Congress—U.S. Senate,U.S. Senate,merge,U.S. Senate,FederalGraph v1 review,USA.gov rows share senate.gov and identical description.
+Weather Service,National Weather Service,merge,National Weather Service,FederalGraph v1 review,USA.gov rows share weather.gov and identical description.
+Comptroller of the Currency,Office of the Comptroller of the Currency,merge,Office of the Comptroller of the Currency,FederalGraph v1 review,Federal Register description identifies Office of the Comptroller of the Currency; USA.gov uses current office name.
+"Copyright Office, Library of Congress",Copyright Office,merge,Copyright Office,FederalGraph v1 review,Federal Register description says U.S. Copyright Office is part of Library of Congress; USA.gov is current directory name.
+Udall Foundation,Morris K. Udall and Stewart L. Udall Foundation,merge,Morris K. Udall and Stewart L. Udall Foundation,FederalGraph v1 review,USA.gov brand name and Federal Register legal name describe same foundation.
+Rural Housing and Community Development Service,Rural Housing Service,historical_alias,Rural Housing Service,FederalGraph v1 review,Federal Register description explicitly says RHCDS was renamed Rural Housing Service.
+Saint Lawrence Seaway Development Corporation,Great Lakes St. Lawrence Seaway Development Corporation,historical_alias,Great Lakes St. Lawrence Seaway Development Corporation,FederalGraph v1 review,Federal Register descriptions explicitly identify current Great Lakes name as former Saint Lawrence entity.
+Broadcasting Board of Governors,U.S. Agency for Global Media,historical_alias,U.S. Agency for Global Media,FederalGraph v1 review,USA.gov explicitly says USAGM was formerly known as Broadcasting Board of Governors.
+Corporation for National and Community Service,AmeriCorps,historical_alias,AmeriCorps,FederalGraph v1 review,USA.gov explicitly says AmeriCorps was formerly known as Corporation for National and Community Service.
+Export Administration Bureau,Bureau of Industry and Security,historical_alias,Bureau of Industry and Security,FederalGraph v1 review,Federal Register explicitly says Export Administration Bureau was renamed Bureau of Industry and Security.
+Food and Consumer Service,Food and Nutrition Service,historical_alias,Food and Nutrition Service,FederalGraph v1 review,Federal Register explicitly says Food and Consumer Service was renamed Food and Nutrition Service.
+Health Care Finance Administration,Centers for Medicare and Medicaid Services,historical_alias,Centers for Medicare and Medicaid Services,FederalGraph v1 review,Federal Register CMS description identifies HCFA as original designation; HCFA source describes later rename.
+Minerals Management Service,"Ocean Energy Management, Regulation, and Enforcement Bureau",historical_alias,"Ocean Energy Management, Regulation, and Enforcement Bureau",FederalGraph v1 review,Federal Register explicitly says MMS was renamed BOEMRE; BOEMRE later split into successor bureaus.
+Southeastern Power Administration,Southwestern Power Administration,keep_separate,,FederalGraph v1 review,Distinct power marketing administrations; similarity is lexical only.
+"Hearings and Appeals Office, Energy Department","Hearings and Appeals Office, Interior Department",keep_separate,,FederalGraph v1 review,Distinct offices in different departments.
+Federal Highway Administration,Federal Housing Administration,keep_separate,,FederalGraph v1 review,Distinct agencies; similarity is lexical/acronym-adjacent only.
+U.S. Northern Command,U.S. Southern Command,keep_separate,,FederalGraph v1 review,Distinct combatant commands.
+Special Inspector General for Afghanistan Reconstruction,Special Inspector General For Iraq Reconstruction,keep_separate,,FederalGraph v1 review,Distinct inspector general offices for different reconstruction efforts.
+U.S. Cyber Command,U.S. Space Command,keep_separate,,FederalGraph v1 review,Distinct combatant commands.
+"Inspector General Office, Interior Department","Inspector General Office, Treasury Department",keep_separate,,FederalGraph v1 review,Distinct departmental inspector general offices.
+National Endowment for the Arts,National Endowment for the Humanities,keep_separate,,FederalGraph v1 review,Distinct independent agencies.
+Defense Acquisition Regulations System,Federal Acquisition Regulation System,keep_separate,,FederalGraph v1 review,Distinct acquisition-regulation systems.
+Federal Committee on Statistical Methodology,FedStats,keep_separate,,FederalGraph v1 review,"USA.gov maps both to FCSM content, but FedStats is not safely treated as the same organizational identity."
+Office of Cuba Broadcasting (Radio y TV Martí),Radio and TV Martí (Radio y TV Martí),keep_separate,,FederalGraph v1 review,Office and broadcast brand/service are related but not the same organizational identity.
+Centers for Medicare and Medicaid Services,Medicare,keep_separate,,FederalGraph v1 review,Agency versus program.
+Centers for Medicare and Medicaid Services,Medicaid,keep_separate,,FederalGraph v1 review,Agency versus program.
+Alhurra TV,Middle East Broadcasting Networks,keep_separate,,FederalGraph v1 review,Broadcast service versus operating network.
+Radio Sawa,Middle East Broadcasting Networks,keep_separate,,FederalGraph v1 review,Broadcast service versus operating network.
+Alhurra TV,Radio Sawa,keep_separate,,FederalGraph v1 review,Distinct broadcast services.
+International Broadcasting Advisory Board,International Broadcasting Board,keep_separate,,FederalGraph v1 review,Federal Register descriptions identify distinct bodies/functions.
+Ginnie Mae,Government National Mortgage Association,merge,Government National Mortgage Association (Ginnie Mae),FederalGraph v1 review,Federal Register description explicitly says GNMA is also known as Ginnie Mae; USA.gov describes Ginnie Mae as the wholly owned government corporation.
+"Trade Representative, Office of United States",U.S. Trade Representative,merge,Office of the U.S. Trade Representative,FederalGraph v1 review,Federal Register describes the Office of the United States Trade Representative; USA.gov uses U.S. Trade Representative.
+Architectural and Transportation Barriers Compliance Board,U.S. Access Board,merge,U.S. Access Board,FederalGraph v1 review,Federal Register legal-name record describes the Access Board; USA.gov uses U.S. Access Board.
+Committee for Purchase From People Who Are Blind or Severely Disabled,U.S. AbilityOne Commission,historical_alias,U.S. AbilityOne Commission,FederalGraph v1 review,Federal Register record describes the committee and states the JWOD/AbilityOne rename; USA.gov uses U.S. AbilityOne Commission.
+Chemical Safety and Hazard Investigation Board,U.S. Chemical Safety Board,merge,U.S. Chemical Safety and Hazard Investigation Board,FederalGraph v1 review,Federal Register legal name and USA.gov Chemical Safety Board/CSB descriptions refer to the same independent board.

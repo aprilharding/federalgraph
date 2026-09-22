@@ -20,6 +20,7 @@ def export_all(
     candidates,
     relationships,
     review,
+    name_review,
     status,
     extraction_summary,
 ):
@@ -30,6 +31,7 @@ def export_all(
     write_rows(out_dir / "organization_match_candidates.csv", candidates)
     write_rows(out_dir / "organization_relationships.csv", relationships)
     write_rows(out_dir / "organization_review_queue.csv", review)
+    write_rows(out_dir / "organization_name_review_queue.csv", name_review)
     write_rows(out_dir / "organization_status_evidence.csv", status)
     summary = {
         **extraction_summary,
@@ -39,6 +41,7 @@ def export_all(
         "identity_match_candidates": len(candidates),
         "hierarchy_candidates": len(relationships),
         "review_rows": len(review),
+        "naming_review_rows": len(name_review),
         "status_evidence_rows": len(status),
     }
     write_json(out_dir / "pipeline_summary.json", summary)
