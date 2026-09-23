@@ -254,3 +254,102 @@ def test_reviewed_preferred_name_wins_when_govinfo_is_absent() -> None:
     assert organizations[0]["canonical_name"] == "Example Commission"
     assert organizations[0]["canonical_name_authority_tier"] == "human_review"
     assert name_review == []
+
+
+def opm_record(
+    level: str,
+    name: str,
+    department_code: str,
+    agency_code: str = "",
+    subagency_code: str = "",
+    parent: str = "",
+) -> dict:
+    row = record("OPM Federal Workforce Data", name, parent=parent)
+    row.update(
+        {
+            "source_record_id": (
+                f"department:{department_code}"
+                if level == "department"
+                else f"agency:{agency_code}"
+                if level == "agency"
+                else f"subagency:{subagency_code}"
+            ),
+            "source_level": level,
+            "opm_department_code": department_code,
+            "opm_agency_code": agency_code,
+            "opm_subagency_code": subagency_code,
+        }
+    )
+    return row
+
+
+def test_opm_standalone_department_agency_and_default_subagency_are_one_identity() -> None:
+    rows = normalize_records(
+        [
+            opm_record("department", "FEDERAL MEDIATION AND CONCILIATION SERVICE", "FM"),
+            opm_record(
+                "agency",
+                "FED MEDIATION AND CONCILIATION SERVICE",
+                "FM",
+                agency_code="FM",
+                parent="FEDERAL MEDIATION AND CONCILIATION SERVICE",
+            ),
+            opm_record(
+                "subagency",
+                "FEDERAL MEDIATION AND CONCILIATION SERVICE",
+                "FM",
+                agency_code="FM",
+                subagency_code="FM00",
+                parent="FED MEDIATION AND CONCILIATION SERVICE",
+            ),
+        ]
+    )
+    organizations, _, _, _, relationships, review, _, _ = resolve(rows)
+    assert len(organizations) == 1
+    assert relationships == []
+    assert review == []
+
+
+def test_opm_component_agency_does_not_merge_into_parent_department() -> None:
+    rows = normalize_records(
+        [
+            opm_record("department", "DEPARTMENT OF DEFENSE", "DOD"),
+            opm_record(
+                "agency",
+                "DEPARTMENT OF THE AIR FORCE",
+                "DOD",
+                agency_code="AF",
+                parent="DEPARTMENT OF DEFENSE",
+            ),
+        ]
+    )
+    organizations, _, _, _, relationships, review, _, _ = resolve(rows)
+    assert len(organizations) == 2
+    assert len(relationships) == 1
+    assert review == []
+
+
+def test_distinct_opm_subagencies_do_not_enter_fuzzy_review_queue() -> None:
+    rows = normalize_records(
+        [
+            opm_record(
+                "subagency",
+                "U.S. ARMY NORTH",
+                "DOD",
+                agency_code="AR",
+                subagency_code="AR5A",
+                parent="DEPARTMENT OF THE ARMY",
+            ),
+            opm_record(
+                "subagency",
+                "U.S. ARMY SOUTH",
+                "DOD",
+                agency_code="AR",
+                subagency_code="ARSO",
+                parent="DEPARTMENT OF THE ARMY",
+            ),
+        ]
+    )
+    organizations, _, _, _, _, review, _, _ = resolve(rows)
+    assert len(organizations) == 2
+    assert review == []

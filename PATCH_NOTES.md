@@ -1,27 +1,14 @@
-# FederalGraph v0.6.1 hotfix
+# FederalGraph v0.7.0
 
-Fixes the first live GovInfo run.
+This release cleans the four-source organization build after the first live GovInfo + OPM run.
 
-## What failed in v0.6.0
+## Changes
 
-The extractor downloaded the Government Manual package XML successfully, then tried to discover granules by scraping the package-level `/context` page. GovInfo renders that page's browse tree client-side, so a plain HTTP request can contain the section buttons without the individual granule links. That produced `GovInfo extractor found no granules` and stopped the pipeline before `data/processed` was regenerated.
+- Adds deterministic OPM structural identity keys for standalone entities represented at department, agency, and `XX00` default-subagency levels.
+- Prevents fuzzy identity review between distinct records from the same authoritative source.
+- Persists 13 cross-source decisions from the v0.6 live review: 8 merges and 5 keep-separate decisions.
+- Removes artificial OPM parent/component links that were actually duplicate reporting representations of one identity.
+- Adds RFC-0006 documenting the OPM structural identity rule.
+- Adds tests for standalone OPM identity collapse, DOD component separation, and same-source subagency review suppression.
 
-## What changed
-
-- Granule discovery now uses the official GovInfo packages API first.
-- `GOVINFO_API_KEY` is supported when set.
-- `DEMO_KEY` is used as the zero-setup fallback.
-- If the API is unavailable, FederalGraph attempts to recover granule IDs from the already-downloaded package XML, then falls back to the old context-page method.
-- Discovery diagnostics are written to `data/raw/govinfo/<package>/granule_discovery.json`.
-- Version bumped to 0.6.1.
-
-## Testing
-
-Install development extras before running tests:
-
-```bash
-python -m pip install -e ".[dev]"
-pytest
-```
-
-The normal pipeline does not require pytest.
+Expected effect on the 2026-09-22 live source set: approximately 997 provisional entities should fall to about 949 identity-resolved entities, while the identity review queue should approach zero. Naming review remains a separate task for non-GovInfo entities.

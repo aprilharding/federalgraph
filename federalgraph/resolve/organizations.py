@@ -55,10 +55,49 @@ def _identity_keys(rec: dict) -> set[str]:
     return set(organization_identity_keys(rec.get("source_name", "")))
 
 
+def _opm_structural_identity_key(rec: dict) -> str:
+    """Return an authoritative OPM identity key when reporting levels are the same unit.
+
+    OPM Federal Workforce Data often emits the same standalone organization at
+    department, agency, and default-subagency levels using different display
+    strings (usually abbreviated or truncated). When the department and agency
+    codes are identical, and a default subagency is exactly ``XX00``, those rows
+    are reporting representations of the same organizational identity.
+
+    This deliberately does *not* merge component agencies inside a larger
+    department (for example DOD/AF/AR/NV), or named subagencies such as DD13.
+    """
+
+    if rec.get("source") != "OPM Federal Workforce Data":
+        return ""
+
+    level = (rec.get("source_level") or "").strip().lower()
+    dept = str(rec.get("opm_department_code") or "").strip()
+    agency = str(rec.get("opm_agency_code") or "").strip()
+    subagency = str(rec.get("opm_subagency_code") or "").strip()
+
+    if level == "department" and dept:
+        return f"opm-unit:{dept}"
+    if level == "agency" and dept and agency and dept == agency:
+        return f"opm-unit:{dept}"
+    if (
+        level == "subagency"
+        and dept
+        and agency
+        and dept == agency
+        and subagency == f"{agency}00"
+    ):
+        return f"opm-unit:{dept}"
+    return ""
+
+
 def _strong_identity_keys(rec: dict) -> set[str]:
     """Remove keys too short to be safe as automatic identity evidence."""
 
     keys = set()
+    opm_key = _opm_structural_identity_key(rec)
+    if opm_key:
+        keys.add(opm_key)
     for key in _identity_keys(rec):
         compact = key.replace(" ", "")
         if len(compact) >= 4:
@@ -196,6 +235,13 @@ def _review_pairs(
 
     candidates: list[Candidate] = []
     for left, right in sorted(pairs):
+        # Distinct rows from the same authoritative directory are not fuzzy
+        # duplicate candidates. Same-source aliases must resolve through a
+        # deterministic identity key (including OPM structural codes) or an
+        # explicit human override. This prevents structurally distinct OPM
+        # subagencies such as Army North/Army South from flooding the queue.
+        if _same_source(records[left], records[right]):
+            continue
         score, reasons = score_pair(records[left], records[right])
         if score < review_threshold:
             continue
