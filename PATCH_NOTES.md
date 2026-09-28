@@ -1,14 +1,38 @@
-# FederalGraph v0.7.0
+# FederalGraph v0.8 — Program identity + statutory purpose foundation
 
-This release cleans the four-source organization build after the first live GovInfo + OPM run.
+This patch adds the first real program-ingest pipeline while deliberately keeping money out of scope.
 
-## Changes
+## Working sources in this increment
 
-- Adds deterministic OPM structural identity keys for standalone entities represented at department, agency, and `XX00` default-subagency levels.
-- Prevents fuzzy identity review between distinct records from the same authoritative source.
-- Persists 13 cross-source decisions from the v0.6 live review: 8 merges and 5 keep-separate decisions.
-- Removes artificial OPM parent/component links that were actually duplicate reporting representations of one identity.
-- Adds RFC-0006 documenting the OPM structural identity rule.
-- Adds tests for standalone OPM identity collapse, DOD component separation, and same-source subagency review suppression.
+- SAM.gov Assistance Listings public current bulk extract (API fallback available with `SAM_API_KEY`)
+- SAM functional-code evidence emitted separately as `program_functions.csv`
+- Treasury FY2027 tax-expenditure workbook (identity only)
+- archived Performance.gov FPI parser, plus `--performance-csv` fallback for a preserved reference table
+- U.S. Code USLM XML lookup for exact U.S.C. citations supplied by program sources
+- repeatable `--supplemental-csv` input for official Budget/CBJ/AFR/etc. candidate extracts while those document-specific extractors are built
 
-Expected effect on the 2026-09-22 live source set: approximately 997 provisional entities should fall to about 949 identity-resolved entities, while the identity review queue should approach zero. Naming review remains a separate task for non-GovInfo entities.
+## Outputs
+
+`programs.csv`, `program_sources.csv`, `program_aliases.csv`, `program_authorities.csv`, `program_functions.csv`, `program_organization_relationships.csv`, `program_match_candidates.csv`, `organization_mapping_review_queue.csv`, `programs_without_organizations.csv`, `organizations_without_programs.csv`, and `program_pipeline_summary.json`.
+
+## Important behavior
+
+- Program identity is source-neutral; SAM is not treated as the whole universe.
+- Statutory authority/purpose evidence is gathered during identity resolution.
+- Fuzzy matching is review-only.
+- Unresolved program → organization mappings are preserved as gaps instead of being forced upward.
+- Financial amounts are intentionally ignored.
+
+## Run
+
+```bash
+python -m pip install -e '.[dev]'
+pytest
+federalgraph programs
+```
+
+For a quick SAM smoke test:
+
+```bash
+federalgraph programs --max-sam-pages 1 --skip-treasury --skip-performance --skip-uscode
+```

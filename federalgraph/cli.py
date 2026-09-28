@@ -40,6 +40,36 @@ def build_parser() -> argparse.ArgumentParser:
     organizations.add_argument("--skip-federal-register", action="store_true")
     organizations.add_argument("--skip-govinfo", action="store_true")
     organizations.add_argument("--skip-opm", action="store_true")
+
+    programs = subparsers.add_parser(
+        "programs", help="Build canonical program identities, authorities, purposes, and org mappings."
+    )
+    programs.add_argument(
+        "--source-csv",
+        type=Path,
+        help="Reuse an existing program source-record CSV instead of downloading primary sources.",
+    )
+    programs.add_argument(
+        "--performance-csv",
+        type=Path,
+        help="Optional archived Performance.gov FPI reference-table CSV.",
+    )
+    programs.add_argument(
+        "--supplemental-csv",
+        type=Path,
+        action="append",
+        default=[],
+        help="Additional official program candidate CSV (repeatable), e.g. curated CBJ/Budget extracts.",
+    )
+    programs.add_argument("--skip-sam", action="store_true")
+    programs.add_argument("--skip-treasury", action="store_true")
+    programs.add_argument("--skip-performance", action="store_true")
+    programs.add_argument("--skip-uscode", action="store_true")
+    programs.add_argument(
+        "--max-sam-pages",
+        type=int,
+        help="Limit SAM pages for a smoke test. Omit for the full inventory.",
+    )
     return parser
 
 
@@ -88,6 +118,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             skip_federal_register=args.skip_federal_register,
             skip_govinfo=args.skip_govinfo,
             skip_opm=args.skip_opm,
+        )
+        print(json.dumps(summary, indent=2))
+        print(f"\nOutputs: {paths.processed}")
+        return 0
+    if args.command == "programs":
+        summary = Pipeline(paths).run_programs(
+            source_csv=args.source_csv.resolve() if args.source_csv else None,
+            performance_csv=args.performance_csv.resolve() if args.performance_csv else None,
+            supplemental_csvs=[path.resolve() for path in args.supplemental_csv],
+            skip_sam=args.skip_sam,
+            skip_treasury=args.skip_treasury,
+            skip_performance=args.skip_performance,
+            skip_uscode=args.skip_uscode,
+            max_sam_pages=args.max_sam_pages,
         )
         print(json.dumps(summary, indent=2))
         print(f"\nOutputs: {paths.processed}")

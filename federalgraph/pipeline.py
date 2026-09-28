@@ -10,11 +10,24 @@ import pandas as pd
 
 from federalgraph.config import Settings
 from federalgraph.export.csv_export import export_all
+from federalgraph.export.program_csv import export_programs
 from federalgraph.export.wordpress import export as export_wordpress
-from federalgraph.extract import federal_register, fpi, govinfo_govman, opm_fwd, usagov
+from federalgraph.extract import (
+    federal_register,
+    fpi,
+    govinfo_govman,
+    opm_fwd,
+    performance_archive,
+    sam_assistance,
+    supplemental_programs,
+    treasury_tax_expenditures,
+    usagov,
+    uscode_authority,
+)
 from federalgraph.normalize.organizations import normalize_records
 from federalgraph.paths import ProjectPaths
 from federalgraph.resolve.organizations import resolve
+from federalgraph.resolve.programs import resolve as resolve_programs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -131,4 +144,123 @@ class Pipeline:
             self.paths.processed / "wordpress_organizations.csv",
         )
         LOGGER.info("Organization build complete: %s", json.dumps(summary, sort_keys=True))
+        return summary
+
+    def run_programs(
+        self,
+        *,
+        source_csv: Optional[Path] = None,
+        performance_csv: Optional[Path] = None,
+        supplemental_csvs: Optional[list[Path]] = None,
+        skip_sam: bool = False,
+        skip_treasury: bool = False,
+        skip_performance: bool = False,
+        skip_uscode: bool = False,
+        max_sam_pages: Optional[int] = None,
+    ) -> dict[str, object]:
+        """Build the program registry without fiscal amounts.
+
+        Program identity is compiled from multiple official sources.  Statutory authority and
+        purpose evidence are collected during the same pass because they materially improve
+        program reconciliation.  Financial facts are intentionally out of scope here.
+        """
+
+        self.paths.ensure_data_dirs()
+        settings = Settings.load(self.paths.config / "sources.json").values
+        source_settings = settings.get("sources", {})
+        extraction_summary: dict[str, object] = {}
+        authorities: list[dict] = []
+        functions: list[dict] = []
+
+        if source_csv is not None:
+            if not source_csv.exists():
+                raise FileNotFoundError(f"Program source CSV not found: {source_csv}")
+            records = pd.read_csv(source_csv).fillna("").to_dict("records")
+            extraction_summary["input_mode"] = "existing_program_source_csv"
+        else:
+            records: list[dict] = []
+
+            sam = source_settings.get("sam_assistance", {})
+            if sam.get("enabled", True) and not skip_sam:
+                LOGGER.info("Extracting programs from SAM.gov Assistance Listings")
+                sam_records, sam_authorities, sam_functions = sam_assistance.extract(
+                    sam["endpoint"],
+                    self.paths.raw,
+                    bulk_url=sam.get("bulk_url", ""),
+                    api_key_env=sam.get("api_key_env", "SAM_API_KEY"),
+                    status=sam.get("status", "ALL"),
+                    page_size=int(sam.get("page_size", 100)),
+                    timeout=int(sam.get("timeout_seconds", 120)),
+                    max_pages=max_sam_pages,
+                )
+                records.extend(sam_records)
+                authorities.extend(sam_authorities)
+                functions.extend(sam_functions)
+                extraction_summary["sam_assistance_source_records"] = len(sam_records)
+                extraction_summary["sam_authority_rows"] = len(sam_authorities)
+                extraction_summary["sam_function_rows"] = len(sam_functions)
+
+            treasury = source_settings.get("treasury_tax_expenditures", {})
+            if treasury.get("enabled", True) and not skip_treasury:
+                LOGGER.info("Extracting tax-expenditure identities from Treasury")
+                treasury_records = treasury_tax_expenditures.extract(
+                    treasury["workbook_url"],
+                    self.paths.raw,
+                    fiscal_year=int(treasury.get("fiscal_year", 2027)),
+                    timeout=int(treasury.get("timeout_seconds", 120)),
+                )
+                records.extend(treasury_records)
+                extraction_summary["treasury_tax_expenditure_source_records"] = len(treasury_records)
+
+            performance = source_settings.get("performance_fpi_archive", {})
+            if performance_csv is not None:
+                LOGGER.info("Reading Performance.gov program inventory from %s", performance_csv)
+                perf_records = performance_archive.records_from_reference_csv(
+                    performance_csv.read_text(encoding="utf-8-sig"), str(performance_csv)
+                )
+                records.extend(perf_records)
+                extraction_summary["performance_archive_source_records"] = len(perf_records)
+            elif performance.get("enabled", True) and not skip_performance:
+                LOGGER.info("Extracting programs from the Performance.gov FPI archive")
+                perf_records = performance_archive.extract(
+                    performance["main_url"],
+                    self.paths.raw,
+                    reference_csv_url=performance.get("reference_csv_url", ""),
+                    timeout=int(performance.get("timeout_seconds", 90)),
+                )
+                records.extend(perf_records)
+                extraction_summary["performance_archive_source_records"] = len(perf_records)
+
+            for path in supplemental_csvs or []:
+                LOGGER.info("Reading supplemental official program evidence from %s", path)
+                extra = supplemental_programs.extract(path)
+                records.extend(extra)
+                extraction_summary.setdefault("supplemental_source_records", 0)
+                extraction_summary["supplemental_source_records"] += len(extra)
+
+        if not records:
+            raise RuntimeError("No program source records were produced.")
+
+        if authorities and not skip_uscode:
+            uscode = source_settings.get("uscode", {})
+            if uscode.get("enabled", True):
+                LOGGER.info("Resolving exact U.S. Code citations for statutory purpose evidence")
+                authorities = uscode_authority.enrich_authorities(
+                    authorities,
+                    self.paths.raw,
+                    download_page=uscode.get(
+                        "download_page", "https://uscode.house.gov/download/download.shtml"
+                    ),
+                    timeout=int(uscode.get("timeout_seconds", 120)),
+                )
+                extraction_summary["statutory_authority_rows_matched"] = sum(
+                    1 for row in authorities if row.get("statutory_lookup_status") == "matched"
+                )
+                extraction_summary["statutory_purpose_rows_found"] = sum(
+                    1 for row in authorities if row.get("statutory_purpose_text")
+                )
+
+        outputs = resolve_programs(records, authorities, functions, self.paths.processed)
+        summary = export_programs(self.paths.processed, outputs, extraction_summary)
+        LOGGER.info("Program build complete: %s", json.dumps(summary, sort_keys=True))
         return summary

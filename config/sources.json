@@ -45,6 +45,50 @@
       "timeout_seconds": 180,
       "notes": "Official OPM/EHRI workforce department, agency, and subagency names/codes. Fallback naming authority only when GovInfo is absent.",
       "selection": "current_latest"
+    },
+    "sam_assistance": {
+      "enabled": true,
+      "kind": "program_inventory",
+      "authority": "official_primary",
+      "endpoint": "https://api.sam.gov/assistance-listings/v1/search",
+      "api_key_env": "SAM_API_KEY",
+      "status": "ALL",
+      "page_size": 100,
+      "timeout_seconds": 120,
+      "notes": "Primary program source. Prefer public current bulk extract; API is fallback/smoke-test. Financial fields are intentionally ignored.",
+      "bulk_url": "https://s3.amazonaws.com/falextracts/Assistance%20Listings/datagov/AssistanceListings_DataGov_PUBLIC_CURRENT.csv"
+    },
+    "sam_functional_index": {
+      "enabled": true,
+      "kind": "program_function_classification",
+      "authority": "official_primary",
+      "notes": "Current SAM functional codes are emitted as a distinct evidence table; older annual Functional Index files can be added without changing the canonical schema."
+    },
+    "treasury_tax_expenditures": {
+      "enabled": true,
+      "kind": "tax_expenditure_inventory",
+      "authority": "official_primary",
+      "fiscal_year": 2027,
+      "workbook_url": "https://home.treasury.gov/system/files/131/Tax-Expenditures-FY2027.xlsx",
+      "timeout_seconds": 120,
+      "notes": "Identity only; revenue-loss estimates are intentionally excluded at this stage."
+    },
+    "performance_fpi_archive": {
+      "enabled": true,
+      "kind": "historical_program_inventory",
+      "authority": "official_additional",
+      "main_url": "https://obamaadministration.archives.performance.gov/federalprograminventory.html",
+      "reference_csv_url": "",
+      "timeout_seconds": 90,
+      "notes": "Additional source for agency-defined programs that are not Assistance Listings. Archive parsing admits only explicit program tables."
+    },
+    "uscode": {
+      "enabled": true,
+      "kind": "statutory_authority_and_purpose",
+      "authority": "official_primary",
+      "download_page": "https://uscode.house.gov/download/download.shtml",
+      "timeout_seconds": 120,
+      "notes": "Exact U.S.C. citations from program sources are resolved against official USLM XML. Raw statutory text is preserved; purpose extraction is evidence, not an LLM summary."
     }
   },
   "resolution": {
