@@ -8,11 +8,28 @@ from typing import Any
 
 import requests
 
-from federalgraph.common import ensure_dir
+from federalgraph.common import ensure_dir, normalize_name
 
 UA = "FederalGraph/0.8 (+public-interest research)"
 SOURCE = "SAM.gov Assistance Listings"
 SOURCE_KEY = "sam_assistance"
+
+# Reviewed SAM Federal Agency (030) labels for organizations already present in
+# the organization graph. These are source-label interpretations, not new entities.
+# https://www.asc.gov/about
+# https://goldwaterscholarship.gov/foundation/our-history/
+# https://www.udall.gov/documents/aboutus/UFEnablingLegislation-Mar232024.pdf
+_SAM_ORGANIZATION_ALIASES = {
+    "federal financial institutions examination council appraisal subcommittee": (
+        "Appraisal Subcommittee of the Federal Financial Institutions Examination Council"
+    ),
+    "barry goldwater scholarship and excellence in education fund": (
+        "Barry Goldwater Scholarship and Excellence in Education Foundation"
+    ),
+    "morris k udall scholarship and excellence in national environmental policy foundation": (
+        "Morris K. Udall and Stewart L. Udall Foundation"
+    ),
+}
 
 
 def _json(value: Any) -> str:
@@ -136,6 +153,10 @@ def _title_case_org(value: str) -> str:
 def _sam_org_match_name(value: str) -> str:
     """Clean a SAM hierarchy component for matching; retain the source in raw."""
     value = re.sub(r"\s*\([A-Za-z0-9]{2,8}\)\s*$", "", value).strip()
+    value = re.sub(r"^THE\s+", "", value, flags=re.IGNORECASE)
+    alias = _SAM_ORGANIZATION_ALIASES.get(normalize_name(value))
+    if alias:
+        return alias
     department = re.fullmatch(
         r"(?:DEPT\.?|DEPARTMENT)\s+OF\s+(THE\s+)?(.+)", value, flags=re.IGNORECASE
     )
@@ -158,9 +179,13 @@ def _parse_sam_federal_agency(value: str) -> tuple[str, str, str]:
         agency = _sam_org_match_name(", ".join(parts[:-2]))
         return department, agency, ""
 
-    # Independent agencies are sometimes repeated as their own parent.
-    if len(parts) == 2 and parts[0].casefold() == parts[1].casefold():
-        return "", _sam_org_match_name(parts[0]), ""
+    # Independent agencies may be repeated with punctuation variants, or as
+    # NAME, SHORTNAME, NAME, SHORTNAME (USAGM/BBG in the current SAM extract).
+    if len(parts) % 2 == 0:
+        half = len(parts) // 2
+        if all(normalize_name(parts[i]) == normalize_name(parts[i + half]) for i in range(half)):
+            if half == 1 or (half == 2 and re.fullmatch(r"[A-Z0-9]{2,8}", parts[1])):
+                return "", _sam_org_match_name(parts[0]), ""
 
     # Other rows use a conventional parent label, e.g. CHILD, DEPT OF DEFENSE.
     if len(parts) >= 2 and re.fullmatch(
