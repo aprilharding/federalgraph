@@ -22,9 +22,23 @@ The organization command combines evidence from:
 - USA.gov agency index; and
 - Federal Register Agencies API.
 
+Reviewed statutory organizations missing from those directories are included as
+cited source assertions in `config/statutory_organization_sources.csv`. They do
+not override the Government Manual's naming authority when a Manual record exists.
+
 ```bash
 federalgraph organizations
 ```
+
+To add new reviewed statutory assertions to an existing local build without
+downloading the directory sources again, reuse the saved source assertions:
+
+```bash
+federalgraph organizations --source-csv data/processed/organization_sources.csv
+```
+
+The statutory source rows are added once, even when they are already present in
+the saved source CSV. Rebuild programs afterward to refresh organization links.
 
 Outputs include canonical identities, aliases, source assertions, hierarchy candidates, status evidence, and review queues in `data/processed/`.
 
