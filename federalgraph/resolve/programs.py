@@ -10,7 +10,7 @@ from typing import Iterable
 import pandas as pd
 from rapidfuzz.fuzz import token_set_ratio
 
-from federalgraph.common import normalize_name
+from federalgraph.common import normalize_name, organization_identity_keys
 
 _SOURCE_PRIORITY = {
     "sam_assistance": 10,
@@ -29,37 +29,50 @@ def _source_key(row: dict) -> str:
     return f"{row.get('source_key','')}::{row.get('source_record_id','')}"
 
 
-def _load_org_index(processed_dir: Path) -> tuple[dict[str, set[str]], dict[str, str]]:
+def _load_org_index(
+    processed_dir: Path,
+) -> tuple[dict[str, set[str]], dict[str, str], dict[str, set[str]], dict[str, set[str]]]:
     names: dict[str, set[str]] = defaultdict(set)
+    variants: dict[str, set[str]] = defaultdict(set)
+    parents: dict[str, set[str]] = defaultdict(set)
     canonical: dict[str, str] = {}
     org_path = processed_dir / "organizations.csv"
     if not org_path.exists():
-        return names, canonical
+        return names, canonical, variants, parents
+
+    def add_name(org_id: str, value: str) -> None:
+        if not org_id or not value:
+            return
+        names[normalize_name(value)].add(org_id)
+        for key in organization_identity_keys(value):
+            variants[key].add(org_id)
+
     for row in pd.read_csv(org_path).fillna("").to_dict("records"):
         org_id = str(row.get("organization_id") or row.get("external_id") or row.get("org_id") or "")
         name = str(row.get("canonical_name") or row.get("name") or "")
         if org_id and name:
-            names[normalize_name(name)].add(org_id)
+            add_name(org_id, name)
             canonical[org_id] = name
     alias_path = processed_dir / "organization_aliases.csv"
     if alias_path.exists():
         for row in pd.read_csv(alias_path).fillna("").to_dict("records"):
             org_id = str(row.get("organization_id") or row.get("external_id") or row.get("org_id") or "")
             alias = str(row.get("alias") or row.get("alias_name") or row.get("name") or "")
-            if org_id and alias:
-                names[normalize_name(alias)].add(org_id)
+            add_name(org_id, alias)
     source_path = processed_dir / "organization_sources.csv"
     if source_path.exists():
         for row in pd.read_csv(source_path).fillna("").to_dict("records"):
             org_id = str(row.get("organization_id") or row.get("canonical_external_id") or row.get("external_id") or row.get("org_id") or "")
             name = str(row.get("source_name") or "")
-            if org_id and name:
-                names[normalize_name(name)].add(org_id)
-    return names, canonical
+            add_name(org_id, name)
+            parent = normalize_name(str(row.get("parent_source_name") or ""))
+            if org_id and parent:
+                parents[org_id].add(parent)
+    return names, canonical, variants, parents
 
 
 def map_organizations(records: list[dict], processed_dir: Path) -> tuple[list[dict], list[dict]]:
-    index, canonical = _load_org_index(processed_dir)
+    index, canonical, variants, parents = _load_org_index(processed_dir)
     mapped: list[dict] = []
     review: list[dict] = []
     for row in records:
@@ -72,27 +85,45 @@ def map_organizations(records: list[dict], processed_dir: Path) -> tuple[list[di
         method = ""
         raw_name = ""
         raw_level = ""
+        unresolved: tuple[str, str, set[str]] | None = None
+        department_name = normalize_name(str(row.get("department_source_name") or ""))
         for level, name in candidates:
             key = normalize_name(name)
             ids = index.get(key, set()) if key else set()
+            # A generic office name can occur beneath many departments. The
+            # program's own department assertion disambiguates only when one
+            # candidate has an explicit matching parent in the org sources.
+            if len(ids) > 1 and level != "department" and department_name:
+                parent_matches = {oid for oid in ids if department_name in parents[oid]}
+                if parent_matches:
+                    ids = parent_matches
+            needs_parent_variant = (
+                not ids
+                or (len(ids) > 1 and not any(department_name in parents[oid] for oid in ids))
+                or (
+                    len(ids) == 1
+                    and bool(parents[next(iter(ids))])
+                    and department_name not in parents[next(iter(ids))]
+                )
+            )
+            if needs_parent_variant and level != "department" and department_name:
+                lexical = set().union(*(variants.get(k, set()) for k in organization_identity_keys(name)))
+                parent_variants = {oid for oid in lexical if department_name in parents[oid]}
+                if len(parent_variants) == 1 or (len(ids) != 1 and parent_variants):
+                    ids = parent_variants
             if len(ids) == 1:
                 match_id = next(iter(ids))
-                method = f"exact_{level}_name_or_alias"
+                method = (
+                    f"exact_{level}_name_or_alias"
+                    if index.get(key, set()) == {match_id}
+                    else f"{level}_name_or_alias_with_parent"
+                )
                 raw_name = name
                 raw_level = level
                 break
             if len(ids) > 1:
-                review.append(
-                    {
-                        "program_source_key": _source_key(row),
-                        "program_source_name": row.get("source_name", ""),
-                        "organization_source_name": name,
-                        "organization_source_level": level,
-                        "issue": "ambiguous_exact_organization_match",
-                        "candidate_organization_ids": "|".join(sorted(ids)),
-                    }
-                )
-                break
+                if unresolved is None:
+                    unresolved = (name, level, ids)
         copy = dict(row)
         copy.update(
             {
@@ -104,7 +135,17 @@ def map_organizations(records: list[dict], processed_dir: Path) -> tuple[list[di
             }
         )
         mapped.append(copy)
-        if not match_id and not any(r["program_source_key"] == _source_key(row) for r in review):
+        if not match_id and unresolved is not None:
+            name, level, ids = unresolved
+            review.append({
+                "program_source_key": _source_key(row),
+                "program_source_name": row.get("source_name", ""),
+                "organization_source_name": name,
+                "organization_source_level": level,
+                "issue": "ambiguous_exact_organization_match",
+                "candidate_organization_ids": "|".join(sorted(ids)),
+            })
+        elif not match_id:
             names = [name for _, name in candidates if name]
             review.append(
                 {
