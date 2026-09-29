@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from federalgraph.resolve.programs import resolve
+from federalgraph.resolve.programs import map_organizations, resolve
 
 
 def _write_orgs(path: Path):
@@ -78,3 +78,19 @@ def test_unmapped_program_is_preserved_as_orphan(tmp_path: Path):
     outputs = resolve(records, [], [], processed)
     assert len(outputs["programs_without_organizations"]) == 1
     assert outputs["organization_mapping_review_queue"][0]["issue"] == "no_exact_organization_match"
+
+
+def test_duplicate_office_name_is_queued_instead_of_assigned_arbitrarily(tmp_path: Path):
+    processed = tmp_path / "processed"
+    processed.mkdir()
+    pd.DataFrame([
+        {"external_id": "ORG-ED-OIG", "canonical_name": "Office of Inspector General"},
+        {"external_id": "ORG-GSA-OIG", "canonical_name": "Office of Inspector General"},
+    ]).to_csv(processed / "organizations.csv", index=False)
+    mapped, review = map_organizations([{
+        "source_key": "sam_assistance", "source_record_id": "1", "source_name": "Example Grant",
+        "office_source_name": "Office of Inspector General",
+    }], processed)
+    assert mapped[0]["organization_id"] == ""
+    assert review[0]["issue"] == "ambiguous_exact_organization_match"
+    assert review[0]["candidate_organization_ids"] == "ORG-ED-OIG|ORG-GSA-OIG"
