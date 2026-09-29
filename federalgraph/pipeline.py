@@ -120,6 +120,30 @@ class Pipeline:
                 records.extend(fpi_records)
                 extraction_summary["fpi_source_records"] = len(fpi_records)
 
+        # Reviewed statutory entities absent from the directory extracts remain
+        # independent, cited source records. The source CSV may already contain
+        # them on a subsequent build, so do not append the same assertion twice.
+        statutory_path = self.paths.config / "statutory_organization_sources.csv"
+        if statutory_path.exists():
+            statutory_records = pd.read_csv(statutory_path).fillna("").to_dict("records")
+            required = {"source", "source_record_id", "source_name", "source_url"}
+            if statutory_records and not required.issubset(statutory_records[0]):
+                raise ValueError(f"Statutory organization CSV needs columns: {sorted(required)}")
+            existing = {
+                (str(row.get("source") or ""), str(row.get("source_record_id") or ""))
+                for row in records
+            }
+            added = 0
+            for row in statutory_records:
+                if not all(str(row.get(field) or "").strip() for field in required):
+                    raise ValueError("Statutory organization records need source, ID, name, and URL")
+                key = (str(row["source"]), str(row["source_record_id"]))
+                if key not in existing:
+                    records.append(row)
+                    existing.add(key)
+                    added += 1
+            extraction_summary["statutory_organization_source_records_added"] = added
+
         if not records:
             raise RuntimeError("No organization source records were produced.")
 
