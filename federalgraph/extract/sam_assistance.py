@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,7 @@ def records_from_payload(payload: dict[str, Any], source_url: str) -> tuple[list
                 "source_date": str(item.get("publishedDate") or "").strip(),
                 "source_url": str(item.get("programWebPage") or source_url),
                 "program_type_raw": _json(assistance_types),
+                "federal_agency_raw": "",
                 "department_source_name": str(org.get("department") or "").strip(),
                 "department_source_code": str(org.get("departmentCode") or "").strip(),
                 "agency_source_name": str(org.get("agency") or "").strip(),
@@ -117,8 +119,6 @@ def records_from_payload(payload: dict[str, Any], source_url: str) -> tuple[list
 
 
 def _norm_col(value: str) -> str:
-    import re
-
     # SAM's public Assistance Listings CSV appends CFDA field numbers to many
     # headings (for example, "Federal Agency (030)" and "Authorization (040)").
     # The numbers are metadata, not part of the semantic column name.
@@ -128,25 +128,49 @@ def _norm_col(value: str) -> str:
 
 def _title_case_org(value: str) -> str:
     value = " ".join((value or "").split()).strip()
+    if re.fullmatch(r"[A-Z]{2,8}", value):
+        return value
     return value.title() if value else ""
+
+
+def _sam_org_match_name(value: str) -> str:
+    """Clean a SAM hierarchy component for matching; retain the source in raw."""
+    value = re.sub(r"\s*\([A-Za-z0-9]{2,8}\)\s*$", "", value).strip()
+    department = re.fullmatch(
+        r"(?:DEPT\.?|DEPARTMENT)\s+OF\s+(THE\s+)?(.+)", value, flags=re.IGNORECASE
+    )
+    if department:
+        article = "the " if department.group(1) else ""
+        return f"Department of {article}{_title_case_org(department.group(2))}"
+    return _title_case_org(value)
 
 
 def _parse_sam_federal_agency(value: str) -> tuple[str, str, str]:
     """Parse SAM's bulk Federal Agency (030) hierarchy."""
-    import re
-
     value = re.sub(r"\s+", " ", value or "").strip(" ,")
     if not value:
         return "", "", ""
 
     parts = [part.strip() for part in value.split(",") if part.strip()]
-    if len(parts) >= 3 and parts[-1].upper() == "DEPARTMENT OF":
-        department_subject = parts[-2]
-        department = f"Department of {_title_case_org(department_subject)}"
-        agency = _title_case_org(", ".join(parts[:-2]))
+    if len(parts) >= 3 and parts[-1].upper() in {"DEPARTMENT OF", "DEPARTMENT OF THE"}:
+        article = "the " if parts[-1].upper() == "DEPARTMENT OF THE" else ""
+        department = f"Department of {article}{_sam_org_match_name(parts[-2])}"
+        agency = _sam_org_match_name(", ".join(parts[:-2]))
         return department, agency, ""
 
-    return "", _title_case_org(value), ""
+    # Independent agencies are sometimes repeated as their own parent.
+    if len(parts) == 2 and parts[0].casefold() == parts[1].casefold():
+        return "", _sam_org_match_name(parts[0]), ""
+
+    # Other rows use a conventional parent label, e.g. CHILD, DEPT OF DEFENSE.
+    if len(parts) >= 2 and re.fullmatch(
+        r"(?:DEPT\.?|DEPARTMENT)\s+OF\s+(?:THE\s+)?[^,]+", parts[-1], flags=re.IGNORECASE
+    ):
+        department = _sam_org_match_name(parts[-1])
+        agency = _sam_org_match_name(", ".join(parts[:-1]))
+        return department, agency, ""
+
+    return "", _sam_org_match_name(value), ""
 
 
 def _parse_authority_text(source_key: str, listing_id: str, text: str) -> list[dict]:
@@ -221,6 +245,7 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
     auth_col = field("Authorizations", "Authorization", "Authorizing Legislation")
     dept_col = field("Department", "Department Name")
     agency_col = field("Agency", "Agency Name", "Federal Agency")
+    federal_agency_col = field("Federal Agency")
     office_col = field("Office", "Office Name", "Sub-Tier", "Subtier")
     org_col = field("Federal Organization", "Federal Agency / Organization", "Organization")
     status_col = field("Status", "Program Status")
@@ -248,6 +273,7 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
             continue
         department = str(row.get(dept_col) or "").strip() if dept_col else ""
         agency = str(row.get(agency_col) or "").strip() if agency_col else ""
+        federal_agency_raw = str(row.get(federal_agency_col) or "") if federal_agency_col else ""
         office = str(row.get(office_col) or "").strip() if office_col else ""
 
         # Current SAM bulk rows encode hierarchy in Federal Agency (030), e.g.
@@ -281,6 +307,7 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
                 )
             ),
             "program_type_raw": "assistance",
+            "federal_agency_raw": federal_agency_raw,
             "department_source_name": department,
             "department_source_code": "",
             "agency_source_name": agency,
