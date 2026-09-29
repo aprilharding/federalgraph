@@ -1,4 +1,4 @@
-from federalgraph.extract.sam_assistance import records_from_payload
+from federalgraph.extract.sam_assistance import records_from_csv, records_from_payload
 
 
 def test_sam_payload_emits_program_authority_and_function_rows():
@@ -49,8 +49,6 @@ def test_sam_payload_emits_program_authority_and_function_rows():
 
 
 def test_sam_bulk_csv_parser_handles_common_export_columns():
-    from federalgraph.extract.sam_assistance import records_from_csv
-
     text = """Program Number,Program Title,Federal Agency,Objectives,Authorization,Functional Index\n10.999,Example Program,Farm Service Agency,Help producers,7 U.S.C. 1234,Agriculture\n"""
     programs, authorities, functions = records_from_csv(text, "https://example.test/current.csv")
     assert programs[0]["source_record_id"] == "10.999"
@@ -58,3 +56,21 @@ def test_sam_bulk_csv_parser_handles_common_export_columns():
     assert authorities[0]["usc_title"] == "7"
     assert authorities[0]["usc_section"] == "1234"
     assert functions[0]["function_name"] == "Agriculture"
+
+
+def test_sam_bulk_csv_parser_handles_current_numbered_headers_and_hierarchy():
+    text = '''Program Title,Program Number,Popular Name (020),Federal Agency (030),Authorization (040),Objectives (050),Published Date,Parent Shortname,URL\n"Agricultural Research Basic and Applied Research",10.001,,"AGRICULTURAL RESEARCH SERVICE, AGRICULTURE, DEPARTMENT OF",7 U.S.C. 427,Support agricultural research,2026-01-01,USDA,https://sam.gov/example\n'''
+
+    programs, authorities, functions = records_from_csv(text, "https://example.test/current.csv")
+
+    assert len(programs) == 1
+    assert programs[0]["source_record_id"] == "10.001"
+    assert programs[0]["department_source_name"] == "Department of Agriculture"
+    assert programs[0]["agency_source_name"] == "Agricultural Research Service"
+    assert programs[0]["agency_stated_purpose"] == "Support agricultural research"
+    assert programs[0]["source_date"] == "2026-01-01"
+    assert programs[0]["source_url"] == "https://sam.gov/example"
+    assert programs[0]["parent_shortname"] == "USDA"
+    assert authorities[0]["usc_title"] == "7"
+    assert authorities[0]["usc_section"] == "427"
+    assert functions == []

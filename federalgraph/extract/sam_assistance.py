@@ -116,23 +116,37 @@ def records_from_payload(payload: dict[str, Any], source_url: str) -> tuple[list
     return programs, authorities, functions
 
 
-
 def _norm_col(value: str) -> str:
     import re
-    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+    # SAM's public Assistance Listings CSV appends CFDA field numbers to many
+    # headings (for example, "Federal Agency (030)" and "Authorization (040)").
+    # The numbers are metadata, not part of the semantic column name.
+    value = re.sub(r"\s*\(\d+\)\s*$", "", str(value).lower())
+    return re.sub(r"[^a-z0-9]+", "", value)
 
 
-def _split_org(value: str) -> tuple[str, str, str]:
+def _title_case_org(value: str) -> str:
+    value = " ".join((value or "").split()).strip()
+    return value.title() if value else ""
+
+
+def _parse_sam_federal_agency(value: str) -> tuple[str, str, str]:
+    """Parse SAM's bulk Federal Agency (030) hierarchy."""
     import re
-    value = re.sub(r"\s+", " ", value or "").strip()
+
+    value = re.sub(r"\s+", " ", value or "").strip(" ,")
     if not value:
         return "", "", ""
-    parts = [part.strip() for part in re.split(r"\s*(?:/|>|;|\|)\s*", value) if part.strip()]
-    if len(parts) >= 3:
-        return parts[0], parts[1], parts[-1]
-    if len(parts) == 2:
-        return parts[0], parts[1], ""
-    return value, "", ""
+
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if len(parts) >= 3 and parts[-1].upper() == "DEPARTMENT OF":
+        department_subject = parts[-2]
+        department = f"Department of {_title_case_org(department_subject)}"
+        agency = _title_case_org(", ".join(parts[:-2]))
+        return department, agency, ""
+
+    return "", _title_case_org(value), ""
 
 
 def _parse_authority_text(source_key: str, listing_id: str, text: str) -> list[dict]:
@@ -212,6 +226,11 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
     status_col = field("Status", "Program Status")
     popular_col = field("Popular Name", "Popular Long Name")
     short_col = field("Popular Short Name")
+    parent_shortname_col = field("Parent Shortname", "Parent Short Name")
+    related_col = field("Related Programs")
+    published_col = field("Published Date")
+    website_col = field("Website Address")
+    url_col = field("URL")
     functional_col = field("Functional Index", "Functional Codes", "Functional Code", "Function")
     if not id_col or not name_col:
         raise RuntimeError(
@@ -230,8 +249,17 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
         department = str(row.get(dept_col) or "").strip() if dept_col else ""
         agency = str(row.get(agency_col) or "").strip() if agency_col else ""
         office = str(row.get(office_col) or "").strip() if office_col else ""
+
+        # Current SAM bulk rows encode hierarchy in Federal Agency (030), e.g.
+        # AGRICULTURAL RESEARCH SERVICE, AGRICULTURE, DEPARTMENT OF.
+        if agency_col and not department and agency:
+            department, parsed_agency, parsed_office = _parse_sam_federal_agency(agency)
+            agency = parsed_agency
+            office = office or parsed_office
+
         if org_col and not (department or agency or office):
-            department, agency, office = _split_org(str(row.get(org_col) or ""))
+            department, agency, office = _parse_sam_federal_agency(str(row.get(org_col) or ""))
+
         authority_text = str(row.get(auth_col) or "").strip() if auth_col else ""
         functional_text = str(row.get(functional_col) or "").strip() if functional_col else ""
         programs.append({
@@ -242,8 +270,16 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
             "source_description": str(row.get(desc_col) or "").strip() if desc_col else "",
             "agency_stated_purpose": str(row.get(objective_col) or "").strip() if objective_col else "",
             "source_status": str(row.get(status_col) or "").strip() if status_col else "",
-            "source_date": "",
-            "source_url": source_url,
+            "source_date": str(row.get(published_col) or "").strip() if published_col else "",
+            "source_url": (
+                str(row.get(url_col) or "").strip()
+                if url_col and str(row.get(url_col) or "").strip()
+                else (
+                    str(row.get(website_col) or "").strip()
+                    if website_col and str(row.get(website_col) or "").strip()
+                    else source_url
+                )
+            ),
             "program_type_raw": "assistance",
             "department_source_name": department,
             "department_source_code": "",
@@ -253,7 +289,8 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
             "office_source_code": "",
             "popular_long_name": str(row.get(popular_col) or "").strip() if popular_col else "",
             "popular_short_name": str(row.get(short_col) or "").strip() if short_col else "",
-            "related_programs_raw": "",
+            "parent_shortname": str(row.get(parent_shortname_col) or "").strip() if parent_shortname_col else "",
+            "related_programs_raw": str(row.get(related_col) or "").strip() if related_col else "",
             "authorization_raw": authority_text,
             "function_raw": functional_text,
             "mission_category_raw": "",
@@ -271,6 +308,7 @@ def records_from_csv(text: str, source_url: str) -> tuple[list[dict], list[dict]
                         "function_name": token,
                     })
     return programs, authorities, functions
+
 
 def extract(
     endpoint: str,
@@ -295,9 +333,12 @@ def extract(
             response = session.get(bulk_url, timeout=timeout)
             response.raise_for_status()
             (out_dir / "AssistanceListings_DataGov_PUBLIC_CURRENT.csv").write_bytes(response.content)
-            programs, authorities, functions = records_from_csv(
-                response.content.decode("utf-8-sig", errors="replace"), response.url
-            )
+            try:
+                bulk_text = response.content.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                # Some current SAM records contain Windows-1252 punctuation.
+                bulk_text = response.content.decode("cp1252")
+            programs, authorities, functions = records_from_csv(bulk_text, response.url)
             if programs:
                 return programs, authorities, functions
         except (requests.RequestException, RuntimeError):
