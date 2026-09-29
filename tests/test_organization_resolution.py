@@ -353,3 +353,69 @@ def test_distinct_opm_subagencies_do_not_enter_fuzzy_review_queue() -> None:
     organizations, _, _, _, _, review, _, _ = resolve(rows)
     assert len(organizations) == 2
     assert review == []
+
+
+def test_same_named_opm_offices_in_different_agencies_remain_distinct() -> None:
+    rows = normalize_records(
+        [
+            opm_record("subagency", "OFFICE OF INSPECTOR GENERAL", "ED", "ED", "ED01", "DEPARTMENT OF EDUCATION"),
+            opm_record("subagency", "OFFICE OF INSPECTOR GENERAL", "GS", "GS", "GS01", "GENERAL SERVICES ADMINISTRATION"),
+        ]
+    )
+    organizations, _, sources, candidates, _, review, _, _ = resolve(rows)
+    assert len(organizations) == len({org["external_id"] for org in organizations}) == 2
+    assert len({row["canonical_external_id"] for row in sources}) == 2
+    assert review == []
+    assert any(row["decision"] == "deterministic_separate" for row in candidates)
+
+
+def test_two_opm_codes_for_same_name_and_parent_need_identity_review() -> None:
+    rows = normalize_records(
+        [
+            opm_record("subagency", "U.S. ARMY INSTALLATION MANAGEMENT COMMAND", "DOD", "AR", "ARBA", "DEPARTMENT OF THE ARMY"),
+            opm_record("subagency", "UNITED STATES ARMY INSTALLATION MANAGEMENT COMMAND", "DOD", "AR", "ARXA", "DEPARTMENT OF THE ARMY"),
+        ]
+    )
+    organizations, _, _, _, _, review, _, _ = resolve(rows)
+    assert len(organizations) == 2
+    assert len(review) == 1
+    assert review[0]["reasons"] == "distinct_opm_subagency_codes"
+
+
+def test_different_opm_offices_do_not_merge_through_shared_directory_alias() -> None:
+    rows = normalize_records(
+        [
+            opm_record("subagency", "OFFICE FOR CIVIL RIGHTS", "ED", "ED", "EDEC", "DEPARTMENT OF EDUCATION"),
+            record("USA.gov Agency Index", "Office for Civil Rights"),
+            opm_record("subagency", "OFFICE OF CIVIL RIGHTS", "GS", "GS", "GS04", "GENERAL SERVICES ADMINISTRATION"),
+        ]
+    )
+    organizations, _, sources, _, _, review, _, _ = resolve(rows)
+    assert len(organizations) == 2
+    assert len({r["canonical_external_id"] for r in sources}) == 2
+    assert review == []
+
+
+def test_opm_reporting_abbreviation_does_not_force_name_review() -> None:
+    rows = normalize_records(
+        [
+            opm_record("department", "DEVELOPMENT FINANCE CORPORATION", "GB"),
+            opm_record("agency", "DFC", "GB", "GB"),
+            opm_record("subagency", "DEVELOPMENT FINANCE CORPORATION", "GB", "GB", "GB00"),
+        ]
+    )
+    organizations, _, _, _, _, _, name_review, _ = resolve(rows)
+    assert organizations[0]["canonical_name"] == "DEVELOPMENT FINANCE CORPORATION"
+    assert name_review == []
+
+
+def test_reversible_office_order_does_not_force_name_review() -> None:
+    rows = normalize_records(
+        [
+            record("Federal Register Agencies API", "Refugee Resettlement Office"),
+            record("USA.gov Agency Index", "Office of Refugee Resettlement"),
+        ]
+    )
+    organizations, _, _, _, _, _, name_review, _ = resolve(rows)
+    assert len(organizations) == 1
+    assert name_review == []

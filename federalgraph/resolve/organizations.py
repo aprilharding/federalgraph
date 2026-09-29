@@ -31,6 +31,7 @@ class Candidate:
 class UnionFind:
     def __init__(self, n: int):
         self.p = list(range(n))
+        self.members = [{i} for i in range(n)]
 
     def find(self, x: int) -> int:
         while self.p[x] != x:
@@ -42,6 +43,38 @@ class UnionFind:
         a, b = self.find(a), self.find(b)
         if a != b:
             self.p[b] = a
+            self.members[a].update(self.members[b])
+            self.members[b].clear()
+
+
+def _opm_subagency_conflict(a: dict, b: dict) -> bool:
+    """Distinct OPM subagency codes are distinct units even if names coincide."""
+    if a.get("source") != "OPM Federal Workforce Data" or b.get("source") != "OPM Federal Workforce Data":
+        return False
+    if a.get("source_level") != "subagency" or b.get("source_level") != "subagency":
+        return False
+    left = str(a.get("opm_subagency_code") or "").strip()
+    right = str(b.get("opm_subagency_code") or "").strip()
+    return bool(left and right and left != right)
+
+
+def _would_conflict(records: list[dict], uf: UnionFind, left: int, right: int) -> bool:
+    return any(
+        _opm_subagency_conflict(records[a], records[b])
+        for a in uf.members[uf.find(left)]
+        for b in uf.members[uf.find(right)]
+    )
+
+
+def _conflict_needs_review(records: list[dict], uf: UnionFind, left: int, right: int) -> bool:
+    """Two codes beneath one parent may be duplicate reporting units."""
+    return any(
+        _opm_subagency_conflict(records[a], records[b])
+        and records[a].get("normalized_parent_name")
+        and records[a].get("normalized_parent_name") == records[b].get("normalized_parent_name")
+        for a in uf.members[uf.find(left)]
+        for b in uf.members[uf.find(right)]
+    )
 
 
 def _same_source(a: dict, b: dict) -> bool:
@@ -187,6 +220,13 @@ def _deterministic_alias_pairs(records: list[dict], uf: UnionFind) -> list[Candi
             if pair in seen:
                 continue
             seen.add(pair)
+            if uf.find(left) == uf.find(right):
+                continue
+            if _would_conflict(records, uf, left, right):
+                needs_review = _conflict_needs_review(records, uf, left, right)
+                candidates.append(Candidate(left, right, 100.0, ["distinct_opm_subagency_codes"],
+                                            "manual_review" if needs_review else "deterministic_separate"))
+                continue
             uf.union(left, right)
             candidates.append(
                 Candidate(
@@ -227,6 +267,8 @@ def _review_pairs(
         for left, right in combinations(sorted(ids), 2):
             left_root, right_root = uf.find(left), uf.find(right)
             if left_root == right_root:
+                continue
+            if _would_conflict(records, uf, left, right):
                 continue
             root_pair = tuple(sorted((left_root, right_root)))
             if root_pair in blocked_root_pairs:
@@ -421,6 +463,14 @@ def resolve(
     for i in range(n):
         groups[uf.find(i)].append(i)
 
+    # Parent-specific offices can legitimately have the same display name.
+    # Keep the old name-based ID for unique names; only disambiguate collisions.
+    choices = {root: choose_canonical_name([records[i] for i in members], preferred_names.get(root, ""))
+               for root, members in groups.items()}
+    name_counts: dict[str, int] = defaultdict(int)
+    for choice in choices.values():
+        name_counts[normalize_name(choice.name)] += 1
+
     organizations: list[dict] = []
     alias_rows: list[dict] = []
     source_rows: list[dict] = []
@@ -429,9 +479,20 @@ def resolve(
 
     for root, members in groups.items():
         member_recs = [records[i] for i in members]
-        name_choice = choose_canonical_name(member_recs, preferred_names.get(root, ""))
+        name_choice = choices[root]
         name = name_choice.name
-        oid = stable_id(name)
+        if name_counts[normalize_name(name)] > 1:
+            identifiers = sorted(
+                f"{rec.get('source')}:{rec.get('source_record_id')}"
+                for rec in member_recs
+                if rec.get("source") == "OPM Federal Workforce Data"
+                and rec.get("source_level") == "subagency"
+            )
+            if not identifiers:
+                identifiers = sorted(f"{rec.get('source')}:{rec.get('source_record_id')}" for rec in member_recs)
+            oid = stable_id(f"{name} [{identifiers[0]}]")
+        else:
+            oid = stable_id(name)
         aliases = sorted({r.get("source_name", "") for r in member_recs if r.get("source_name")})
         domains = sorted({r.get("domain", "") for r in member_recs if r.get("domain")})
         srcs = sorted({r.get("source", "") for r in member_recs if r.get("source")})
@@ -498,6 +559,7 @@ def resolve(
     candidate_rows: list[dict] = []
     review: list[dict] = []
     orgs_needing_review: set[str] = set()
+    seen_review_pairs: set[tuple[str, str, str]] = set()
 
     for candidate in candidates:
         left_rec, right_rec = records[candidate.left], records[candidate.right]
@@ -520,6 +582,11 @@ def resolve(
         candidate_rows.append(row)
 
         if candidate.decision == "manual_review" and left_org != right_org:
+            review_key = (*sorted((left_org, right_org)), "distinct_opm_subagency_codes" if
+                          "distinct_opm_subagency_codes" in candidate.reasons else "fuzzy")
+            if review_key in seen_review_pairs:
+                continue
+            seen_review_pairs.add(review_key)
             orgs_needing_review.update({left_org, right_org})
             review.append(
                 {

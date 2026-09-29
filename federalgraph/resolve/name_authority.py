@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from federalgraph.common import normalize_name, organization_identity_keys, strip_parenthetical_acronym
 
@@ -53,6 +54,16 @@ def _display_name(rec: dict, *, exact: bool = False) -> str:
 def _equivalent_names(a: str, b: str) -> bool:
     if normalize_name(a) == normalize_name(b):
         return True
+    # Agency indexes alphabetize these same words as "X Office" / "Office of X".
+    # Keep this limited to a reversible designator move; added or missing words
+    # (including "for" versus "of") remain genuine naming disagreements.
+    def moved_designator(name: str) -> str:
+        value = normalize_name(name)
+        match = re.fullmatch(r"(.+) (office|bureau)", value)
+        return f"{match.group(2)} of {match.group(1)}" if match else value
+
+    if moved_designator(a) == moved_designator(b):
+        return True
     return bool(set(organization_identity_keys(a)) & set(organization_identity_keys(b)))
 
 
@@ -71,11 +82,31 @@ def _latest_record(records: list[dict]) -> dict:
         records,
         key=lambda rec: (
             _as_of(rec),
+            1 if _opm_standalone_key(rec) and rec.get("source_level") == "department" else 0,
+            1 if normalize_name(_display_name(rec)).startswith(("office of ", "bureau of ", "national institute of ")) else 0,
+            1 if "," not in _display_name(rec) else 0,
+            len(_display_name(rec)),
             _display_name(rec, exact=True).lower(),
             str(rec.get("source_record_id") or ""),
         ),
         reverse=True,
     )[0]
+
+
+def _opm_standalone_key(rec: dict) -> str:
+    if source_tier(str(rec.get("source") or "")) != "opm_fwd":
+        return ""
+    department = str(rec.get("opm_department_code") or "").strip()
+    agency = str(rec.get("opm_agency_code") or "").strip()
+    subagency = str(rec.get("opm_subagency_code") or "").strip()
+    level = rec.get("source_level")
+    if level == "department" and department:
+        return department
+    if level == "agency" and department == agency and department:
+        return department
+    if level == "subagency" and department == agency and subagency == f"{agency}00" and agency:
+        return department
+    return ""
 
 
 def choose_canonical_name(member_recs: list[dict], preferred_name: str = "") -> NameChoice:
@@ -142,7 +173,20 @@ def choose_canonical_name(member_recs: list[dict], preferred_name: str = "") -> 
             break
 
     assert chosen is not None
-    disagreement = _has_material_name_disagreement(all_names)
+    # OPM's department, agency and default-subagency labels often describe one
+    # reporting unit. The shorter agency label is frequently truncated. Retain
+    # it as a source alias, but compare the longest label for that unit.
+    standalone = _opm_standalone_key(chosen)
+    comparison_names = [
+        _display_name(rec)
+        for rec in usable
+        if not (
+            standalone
+            and _opm_standalone_key(rec) == standalone
+            and len(_display_name(rec)) < len(_display_name(chosen))
+        )
+    ]
+    disagreement = _has_material_name_disagreement(sorted(set(comparison_names)))
     return NameChoice(
         name=_display_name(chosen),
         source=str(chosen.get("source") or ""),
