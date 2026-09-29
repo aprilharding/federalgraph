@@ -119,6 +119,52 @@ def test_sam_bulk_csv_parser_handles_current_numbered_headers_and_hierarchy():
             "Department of the Interior",
             "Natural Resources Revenue",
         ),
+        (
+            "EXPORT-IMPORT BANK OF THE U.S., EXPORT-IMPORT BANK OF THE US",
+            "",
+            "Export-Import Bank Of The U.S.",
+        ),
+        (
+            "FEDERAL FINANCIAL INSTITUTIONS EXAMINATION COUNCIL APPRAISAL SUBCOMMITTEE, "
+            "FEDERAL FINANCIAL INSTITUTIONS EXAMINATION COUNCIL APPRAISAL SUBCOMMITTEE",
+            "",
+            "Appraisal Subcommittee of the Federal Financial Institutions Examination Council",
+        ),
+        (
+            "THE INSTITUTE OF MUSEUM AND LIBRARY SERVICES, "
+            "THE INSTITUTE OF MUSEUM AND LIBRARY SERVICES",
+            "",
+            "Institute Of Museum And Library Services",
+        ),
+        (
+            "BARRY GOLDWATER SCHOLARSHIP AND EXCELLENCE IN EDUCATION FUND, "
+            "BARRY GOLDWATER SCHOLARSHIP AND EXCELLENCE IN EDUCATION FUND",
+            "",
+            "Barry Goldwater Scholarship and Excellence in Education Foundation",
+        ),
+        (
+            "MORRIS K. UDALL SCHOLARSHIP AND EXCELLENCE IN NATIONAL ENVIRONMENTAL POLICY "
+            "FOUNDATION, MORRIS K UDALL SCHOLARSHIP AND EXCELLENCE IN NATIONAL "
+            "ENVIRONMENTAL POLICY FOUNDATION",
+            "",
+            "Morris K. Udall and Stewart L. Udall Foundation",
+        ),
+        (
+            "JAPAN-U.S. FRIENDSHIP COMMISSION, JAPAN-US FRIENDSHIP COMMISSION",
+            "",
+            "Japan-U.S. Friendship Commission",
+        ),
+        (
+            "UNITED STATES AGENCY FOR GLOBAL MEDIA, BBG, "
+            "UNITED STATES AGENCY FOR GLOBAL MEDIA, BBG",
+            "",
+            "United States Agency For Global Media",
+        ),
+        (
+            "SOUTHEAST CRESCENT REGIONAL COMMISSION, SOUTHEAST CRESCENT REGIONAL COMMISSION",
+            "",
+            "Southeast Crescent Regional Commission",
+        ),
     ],
 )
 def test_sam_bulk_csv_parses_structured_agencies_and_preserves_raw(raw, department, agency):
