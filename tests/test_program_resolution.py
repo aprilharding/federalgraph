@@ -94,3 +94,35 @@ def test_duplicate_office_name_is_queued_instead_of_assigned_arbitrarily(tmp_pat
     assert mapped[0]["organization_id"] == ""
     assert review[0]["issue"] == "ambiguous_exact_organization_match"
     assert review[0]["candidate_organization_ids"] == "ORG-ED-OIG|ORG-GSA-OIG"
+
+
+def test_ambiguous_office_uses_explicit_parent_or_department(tmp_path: Path):
+    processed = tmp_path / "processed"
+    processed.mkdir()
+    pd.DataFrame([
+        {"external_id": "ORG-DOT", "canonical_name": "Department of Transportation"},
+        {"external_id": "ORG-HHS", "canonical_name": "Department of Health and Human Services"},
+        {"external_id": "ORG-COM-SEC", "canonical_name": "Office of the Secretary"},
+        {"external_id": "ORG-VA-SEC", "canonical_name": "Office of the Secretary"},
+        {"external_id": "ORG-HHS-SEC", "canonical_name": "Office of the Secretary"},
+        {"external_id": "ORG-COM-OIG", "canonical_name": "Office of the Inspector General"},
+        {"external_id": "ORG-HHS-OIG", "canonical_name": "Office of Inspector General"},
+    ]).to_csv(processed / "organizations.csv", index=False)
+    pd.DataFrame([
+        {"canonical_external_id": "ORG-COM-SEC", "source_name": "Office of the Secretary", "parent_source_name": "Department of Commerce"},
+        {"canonical_external_id": "ORG-VA-SEC", "source_name": "Office of the Secretary", "parent_source_name": "Department of Veterans Affairs"},
+        {"canonical_external_id": "ORG-HHS-SEC", "source_name": "Office of the Secretary", "parent_source_name": "Department of Health and Human Services"},
+        {"canonical_external_id": "ORG-COM-OIG", "source_name": "Office of the Inspector General", "parent_source_name": "Department of Commerce"},
+        {"canonical_external_id": "ORG-HHS-OIG", "source_name": "Office of Inspector General", "parent_source_name": "Department of Health and Human Services"},
+    ]).to_csv(processed / "organization_sources.csv", index=False)
+    mapped, review = map_organizations([
+        {"source_key": "sam_assistance", "source_record_id": "20.223", "source_name": "Transport Grant", "agency_source_name": "Office of the Secretary", "department_source_name": "Department of Transportation"},
+        {"source_key": "sam_assistance", "source_record_id": "93.A92", "source_name": "HHS Hotline", "agency_source_name": "Office of the Inspector General", "department_source_name": "Department of Health and Human Services"},
+        {"source_key": "sam_assistance", "source_record_id": "93.001", "source_name": "HHS Secretary Grant", "agency_source_name": "Office of the Secretary", "department_source_name": "Department of Health and Human Services"},
+    ], processed)
+    assert review == []
+    assert mapped[0]["organization_id"] == "ORG-DOT"
+    assert mapped[0]["agency_source_name"] == "Office of the Secretary"
+    assert mapped[1]["organization_id"] == "ORG-HHS-OIG"
+    assert mapped[1]["organization_mapping_method"] == "agency_name_or_alias_with_parent"
+    assert mapped[2]["organization_id"] == "ORG-HHS-SEC"
