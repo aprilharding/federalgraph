@@ -3,14 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 from federalgraph import __version__
 from federalgraph.config import Settings
+from federalgraph.extract import agency_reports
 from federalgraph.logging_config import configure_logging
 from federalgraph.paths import ProjectPaths
-from federalgraph.pipeline import Pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
     organizations.add_argument("--skip-opm", action="store_true")
 
     programs = subparsers.add_parser(
-        "programs", help="Build canonical program identities, authorities, purposes, and org mappings."
+        "programs",
+        help="Build canonical program identities, authorities, purposes, and org mappings.",
     )
     programs.add_argument(
         "--source-csv",
@@ -59,7 +60,10 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         action="append",
         default=[],
-        help="Additional official program candidate CSV (repeatable), e.g. curated CBJ/Budget extracts.",
+        help=(
+            "Additional official program candidate CSV (repeatable), "
+            "e.g. curated CBJ/Budget extracts."
+        ),
     )
     programs.add_argument("--skip-sam", action="store_true")
     programs.add_argument("--skip-treasury", action="store_true")
@@ -69,6 +73,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-sam-pages",
         type=int,
         help="Limit SAM pages for a smoke test. Omit for the full inventory.",
+    )
+    reports = subparsers.add_parser(
+        "reports", help="Discover agency performance report candidates from saved USA.gov websites."
+    )
+    reports.add_argument(
+        "--source-csv",
+        type=Path,
+        help="Organization sources CSV; defaults to data/processed/organization_sources.csv.",
+    )
+    reports.add_argument("--max-pages", type=int, default=40)
+    reports.add_argument("--max-depth", type=int, default=3)
+    reports.add_argument("--workers", type=int, default=4)
+    reports.add_argument("--max-agencies", type=int, help="Limit website targets for a smoke test.")
+    reports.add_argument(
+        "--download-reports",
+        action="store_true",
+        help="Save candidate PDF/HTML documents as raw evidence.",
     )
     return parser
 
@@ -96,7 +117,7 @@ def command_sources(paths: ProjectPaths) -> int:
     return 0
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     configure_logging(args.verbose)
@@ -110,7 +131,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return command_doctor(paths)
     if args.command == "sources":
         return command_sources(paths)
+    if args.command == "reports":
+        paths.ensure_data_dirs()
+        summary = agency_reports.discover(
+            source_csv=(
+                args.source_csv.resolve()
+                if args.source_csv
+                else paths.processed / "organization_sources.csv"
+            ),
+            raw_dir=paths.raw / "agency_reports",
+            out_dir=paths.processed,
+            max_pages=args.max_pages,
+            max_depth=args.max_depth,
+            workers=args.workers,
+            max_agencies=args.max_agencies,
+            download_reports=args.download_reports,
+        )
+        print(json.dumps(summary, indent=2))
+        print(f"\nOutputs: {paths.processed}")
+        return 0
     if args.command == "organizations":
+        from federalgraph.pipeline import Pipeline
+
         summary = Pipeline(paths).run_organizations(
             fpi_csv=args.fpi_csv.resolve() if args.fpi_csv else None,
             source_csv=args.source_csv.resolve() if args.source_csv else None,
@@ -123,6 +165,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"\nOutputs: {paths.processed}")
         return 0
     if args.command == "programs":
+        from federalgraph.pipeline import Pipeline
+
         summary = Pipeline(paths).run_programs(
             source_csv=args.source_csv.resolve() if args.source_csv else None,
             performance_csv=args.performance_csv.resolve() if args.performance_csv else None,

@@ -110,6 +110,70 @@ The program build writes:
 
 The two gap reports are intentional: FederalGraph preserves programs that do not resolve to an organization and organizations for which the current program sources reveal no program.
 
+## Agency report discovery
+
+When the Performance.gov archive is unavailable, discover performance evidence
+on agency websites using the USA.gov assertions already saved in
+`data/processed/organization_sources.csv`. Run the organization build first if
+that file does not exist. Only USA.gov rows seed this command; coverage of the
+organization registry is therefore limited to agencies represented in that index.
+
+Try five targets, then search every saved USA.gov website and save documents:
+
+```bash
+federalgraph reports --max-agencies 5
+federalgraph reports --download-reports
+```
+
+Each search follows report, budget, strategic-plan, and related navigation links
+on the agency site, prioritizing FY2024 and then newer named years. Defaults are
+40 pages and three link levels per target, with four workers. Change the bounds
+with `--max-pages`, `--max-depth`, and `--workers`; use `--source-csv` for another
+organization source export. Robots exclusions, inaccessible sites, and searches
+that found no candidate remain visible in the coverage export.
+
+Outputs in `data/processed/`:
+
+- `agency_report_sources.csv`: organization IDs, candidate titles/types, year
+  candidates, report URLs, discovery pages, and optional snapshot hashes/paths.
+- `agency_report_coverage.csv`: a result for each target, page counts, search-limit
+  flags, and errors.
+- `agency_report_summary.json`: target, candidate, and download counts; identifies
+  limited smoke runs.
+
+Raw HTML evidence and optional PDF/HTML documents go in
+`data/raw/agency_reports/`. Report links and filename years are **unverified
+candidates**: a landing page may cover several reports, and a component's link
+may lead to its parent's report. The associated organization identifies the
+website source, not a verified issuing organization. No candidate in a bounded
+search is not proof of absence. This command does not extract program identities
+or change the existing program exports; document extraction is a subsequent step.
+
+### Run report discovery on GitHub
+
+The manual **Discover agency reports** workflow runs without downloading reports
+onto your computer. After this workflow is merged to the default branch:
+
+1. Open the repository's **Actions** tab and choose **Discover agency reports**.
+2. Click **Run workflow**. Keep website targets at `5` for a test, or set `0` to
+   search every saved USA.gov target. Choose whether to save report documents.
+3. Open the completed run. Under **Artifacts**, `federalgraph-tables-*` contains
+   the organization outputs and report CSVs/summaries; `federalgraph-evidence-*`
+   contains raw website evidence and downloaded reports.
+
+The runner starts from a clean checkout and rebuilds organization sources using
+all configured directory sources before discovering reports. It does not reuse
+or upload your Mac's CSVs, so changing upstream directories can change results.
+An optional repository secret `GOVINFO_API_KEY` is used by the organization build;
+the configured public fallback applies when no key is supplied.
+
+Artifacts request 90-day retention, subject to repository settings; this is not
+permanent archival storage. They remain online until downloaded or expired.
+The workflow attempts to upload available evidence even if a build fails, and
+allows up to 330 minutes. A timeout or failed run is not a completed full search.
+Large crawls consume GitHub's runner and artifact storage allowances. No
+additional reports are saved in your local checkout unless you download them.
+
 ## Install
 
 FederalGraph supports Python 3.9 or later.

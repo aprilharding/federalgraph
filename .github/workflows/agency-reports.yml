@@ -1,0 +1,95 @@
+name: Discover agency reports
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_agencies:
+        description: 'Website targets (5 for a test; 0 for all)'
+        required: true
+        default: '5'
+        type: string
+      download_reports:
+        description: Save candidate PDF/HTML reports
+        required: true
+        default: true
+        type: boolean
+      max_pages:
+        description: Maximum pages searched per website
+        required: true
+        default: '40'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agency-report-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      MAX_AGENCIES: ${{ inputs.max_agencies }}
+      MAX_PAGES: ${{ inputs.max_pages }}
+      DOWNLOAD_REPORTS: ${{ inputs.download_reports }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install FederalGraph
+        run: python -m pip install -e '.[dev]'
+      - name: Check report discovery
+        run: python -m pytest tests/test_agency_reports.py
+      - name: Validate run limits
+        run: |
+          python - <<'PY'
+          import os
+          if int(os.environ['MAX_AGENCIES']) < 0:
+              raise ValueError('max_agencies must be 0 (all) or a positive integer')
+          if int(os.environ['MAX_PAGES']) < 1:
+              raise ValueError('max_pages must be positive')
+          PY
+      - name: Build organization sources on GitHub
+        env:
+          GOVINFO_API_KEY: ${{ secrets.GOVINFO_API_KEY }}
+        run: federalgraph organizations
+      - name: Discover agency reports
+        run: |
+          args=(--max-pages "$MAX_PAGES")
+          if [ "$MAX_AGENCIES" != '0' ]; then
+            args+=(--max-agencies "$MAX_AGENCIES")
+          fi
+          if [ "$DOWNLOAD_REPORTS" = 'true' ]; then
+            args+=(--download-reports)
+          fi
+          federalgraph reports "${args[@]}"
+      - name: Save CSVs and summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: federalgraph-tables-${{ github.run_id }}-${{ github.run_attempt }}
+          path: data/processed/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Save raw website evidence and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: federalgraph-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: data/raw/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Record output locations
+        if: always()
+        run: |
+          {
+            echo '### FederalGraph agency report discovery'
+            echo 'Download the tables and evidence artifacts from this run page.'
+            echo 'Artifacts request 90-day retention, subject to repository settings.'
+            echo 'A full search is bounded by page/depth limits and runner timeouts.'
+            echo 'Organization sources were rebuilt on the runner; local CSVs were not uploaded.'
+          } >> "$GITHUB_STEP_SUMMARY"
