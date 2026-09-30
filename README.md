@@ -110,6 +110,45 @@ The program build writes:
 
 The two gap reports are intentional: FederalGraph preserves programs that do not resolve to an organization and organizations for which the current program sources reveal no program.
 
+## Agency report discovery
+
+When the Performance.gov archive is unavailable, discover performance evidence
+on agency websites using the USA.gov assertions already saved in
+`data/processed/organization_sources.csv`. Run the organization build first if
+that file does not exist. Only USA.gov rows seed this command; coverage of the
+organization registry is therefore limited to agencies represented in that index.
+
+Try five targets, then search every saved USA.gov website and save documents:
+
+```bash
+federalgraph reports --max-agencies 5
+federalgraph reports --download-reports
+```
+
+Each search follows report, budget, strategic-plan, and related navigation links
+on the agency site, prioritizing FY2024 and then newer named years. Defaults are
+40 pages and three link levels per target, with four workers. Change the bounds
+with `--max-pages`, `--max-depth`, and `--workers`; use `--source-csv` for another
+organization source export. Robots exclusions, inaccessible sites, and searches
+that found no candidate remain visible in the coverage export.
+
+Outputs in `data/processed/`:
+
+- `agency_report_sources.csv`: organization IDs, candidate titles/types, year
+  candidates, report URLs, discovery pages, and optional snapshot hashes/paths.
+- `agency_report_coverage.csv`: a result for each target, page counts, search-limit
+  flags, and errors.
+- `agency_report_summary.json`: target, candidate, and download counts; identifies
+  limited smoke runs.
+
+Raw HTML evidence and optional PDF/HTML documents go in
+`data/raw/agency_reports/`. Report links and filename years are **unverified
+candidates**: a landing page may cover several reports, and a component's link
+may lead to its parent's report. The associated organization identifies the
+website source, not a verified issuing organization. No candidate in a bounded
+search is not proof of absence. This command does not extract program identities
+or change the existing program exports; document extraction is a subsequent step.
+
 ## Install
 
 FederalGraph supports Python 3.9 or later.
